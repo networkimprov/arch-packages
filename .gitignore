@@ -1,0 +1,4 @@
+pocket-anvl/*/*pkg.tar*
+pocket-anvl/*/src
+pocket-anvl/*/pkg
+pocket-anvl/*/*.tgz
