@@ -1,0 +1,21 @@
+diff --git a/src/io.c b/src/io.c
+index 28d20ca..2166d25 100644
+--- a/src/io.c
++++ b/src/io.c
+@@ -43,6 +43,7 @@
+ #include <string.h>
+ #include <fcntl.h>
+ #include <errno.h>
++#include <limits.h>
+ 
+ #include <sys/stat.h>
+ #include <sys/types.h>
+@@ -64,7 +65,7 @@
+ 
+ /** Timeout for all IO other than opening connections.  Much longer, because
+  * compiling files can take a long time. **/
+-const int dcc_io_timeout = 300; /* seconds */
++const int dcc_io_timeout = INT_MAX; /* seconds */
+ 
+ 
+ /**
