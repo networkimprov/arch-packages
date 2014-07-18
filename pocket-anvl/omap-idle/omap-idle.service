@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable deeper idle states
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/omap-idle.sh start
+
+[Install]
+WantedBy=multi-user.target
