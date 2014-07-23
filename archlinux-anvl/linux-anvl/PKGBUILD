@@ -2,7 +2,7 @@
 
 # based off of https://github.com/archlinuxarm/PKGBUILDs/blob/master/core/linux-armv7/PKGBUILD
 
-pkgbase="linux-pocket-anvl"
+pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="Custom kernel for the pocket anvl"
 pkgver="3.14.1"
@@ -158,7 +158,7 @@ _package-headers() {
   mkdir -p "${pkgdir}/usr/lib/modules/${_kernver}/build/drivers/media/dvb-core"
   cp drivers/media/dvb-core/*.h "${pkgdir}/usr/lib/modules/${_kernver}/build/drivers/media/dvb-core/"
 
-  # these do not exist for pocket-anvl
+  # these do not exist for anvl
   # and...
   # http://bugs.archlinux.org/task/11194
   #mkdir -p "${pkgdir}/usr/lib/modules/${_kernver}/build/include/config/dvb/"
