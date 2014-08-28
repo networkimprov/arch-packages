@@ -9,7 +9,7 @@ url="https://github.com/networkimprov/arch-packages"
 license=("none")
 source=("omap-idle.service"
         "omap-idle.sh")
-md5sums=('11974d36bfe4ebddd1262328e10243b2'
+md5sums=('fa524170d61181faada33ba4d8432c0f'
          '8583076f6a8aa1e13d7e05991ed4faf9')
 
 package() {
