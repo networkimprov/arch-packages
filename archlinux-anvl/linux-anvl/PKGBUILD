@@ -7,18 +7,18 @@ _kernelname="${pkgbase#linux}"
 _desc="Custom kernel for the pocket anvl"
 pkgver="3.14.1"
 pkgrel="1"
-_srcname="${pkgbase}-${pkgver}-1"
+_srcname="${pkgbase}-${pkgver}"
 arch=("armv7h")
 url="http://www.kernel.org/"
 license=("GPL2")
 makedepends=("xmlto" "docbook-xsl" "kmod" "inetutils" "bc" "git" "uboot-tools")
 options=("!strip")
-source=("http://pkgbuild.com/~td123/linux-pocket-anvl/${_srcname}.tar.xz")
-md5sums=("272d32a87e855006b7b9f00b7bd56c4a")
+source=("http://pkgbuild.com/~td123/linux-anvl/${_srcname}.tar.xz")
+md5sums=('980c4c204ceb484a86b424be35883b50')
 
 prepare() {
   # make sure to keep a pristine git version
-  cd ${_srcname}
+  cd ${pkgbase}
 
   # add pkgrel to extraversion
   sed -ri "s|^(EXTRAVERSION =)(.*)|\1 \2-${pkgrel}|" Makefile
@@ -28,10 +28,16 @@ prepare() {
 }
 
 build() {
-  cd "${srcdir}/${_srcname}"
+  cd "${srcdir}/${pkgbase}"
 
   # use our custom configuration
   make omap2plus_defconfig
+
+  # set the local version
+  sed \
+    -e 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-ANVL"/' \
+    -e 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/' \
+    -i .config
 
   # get kernel version
   make prepare
@@ -42,14 +48,14 @@ build() {
 
 _package() {
   pkgdesc="The Linux Kernel and modules - ${_desc}"
-  depends=('coreutils' 'linux-firmware' 'kmod' 'mkinitcpio>=0.7')
+  depends=('coreutils' 'sd8787_uapsta-fw' 'kmod' 'mkinitcpio>=0.7')
   optdepends=('crda: to set the correct wireless channels of your country')
   provides=('kernel26' "linux=${pkgver}" 'aufs_friendly')
   conflicts=('linux')
   replaces=('linux-mvebu')
   install=${pkgname}.install
 
-  cd "${srcdir}/${_srcname}"
+  cd "${srcdir}/${pkgbase}"
 
   KARCH=arm
 
@@ -60,8 +66,11 @@ _package() {
 
   mkdir -p "${pkgdir}"/{lib/modules,lib/firmware,boot/dtbs}
   make INSTALL_MOD_PATH="${pkgdir}" modules_install
-  cp arch/$KARCH/boot/zImage "${pkgdir}/boot/zImage"
+  cp arch/$KARCH/boot/zImage "${pkgdir}/boot/vmlinuz-linux-anvl"
   cp arch/$KARCH/boot/dts/*.dtb "${pkgdir}/boot/dtbs"
+
+  # custom name for our dtb
+  cp arch/$KARCH/boot/dts/omap3-anvl.dtb "${pkgdir}/boot/dtbs/anvl.dtb"
 
   # set correct depmod command for install
   sed \
@@ -76,10 +85,10 @@ _package() {
   # gzip -9 all modules to save 100MB of space
   find "${pkgdir}" -name '*.ko' |xargs -P 2 -n 1 gzip -9
   # make room for external modules
-  ln -s "../extramodules-${_basekernel}-${_kernelname:-ARCH}" "${pkgdir}/lib/modules/${_kernver}/extramodules"
+  ln -s "../extramodules-${_basekernel}-${_kernelname:-ANVL}" "${pkgdir}/lib/modules/${_kernver}/extramodules"
   # add real version for building modules and running depmod from post_install/upgrade
-  mkdir -p "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}"
-  echo "${_kernver}" > "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}/version"
+  mkdir -p "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ANVL}"
+  echo "${_kernver}" > "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ANVL}/version"
 
   # Now we call depmod...
   depmod -b "$pkgdir" -F System.map "$_kernver"
@@ -97,7 +106,7 @@ _package-headers() {
 
   install -dm755 "${pkgdir}/usr/lib/modules/${_kernver}"
 
-  cd "${srcdir}/${_srcname}"
+  cd "${srcdir}/${pkgbase}"
   install -D -m644 Makefile \
     "${pkgdir}/usr/lib/modules/${_kernver}/build/Makefile"
   install -D -m644 kernel/Makefile \
