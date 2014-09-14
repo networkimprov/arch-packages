@@ -5,6 +5,7 @@ Description=Enable deeper idle states
 Type=oneshot
 ExecStart=/usr/bin/omap-idle.sh start
 ExecStop=/usr/bin/omap-idle.sh stop
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

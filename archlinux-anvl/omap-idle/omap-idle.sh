@@ -5,39 +5,27 @@
 # once at boot.
 #
 
-uarts=$(find /sys/class/tty/ttyO*/device/power/ -type d)
+uarts=$(find /sys/class/tty/tty[SO]*/device/power/ -type d)
 
 start() {
 	for uart in $uarts; do
-		if ! echo 3000 > $uart/autosuspend_delay_ms; then
-			exit 1
-		fi
+		echo 3000 > $uart/autosuspend_delay_ms 2>/dev/null
 	done
 
-	uarts=$(/usr/bin/find /sys/class/tty/ttyO*/power/ -type d)
+	uarts=$(/usr/bin/find /sys/class/tty/tty[SO]*/power/ -type d)
 	for uart in $uarts; do
-		if ! echo enabled > $uart/wakeup; then
-			exit 2
-		fi
-		if ! echo auto > $uart/control; then
-			exit 3
-		fi
+		echo enabled > $uart/wakeup 2>/dev/null
+		echo auto > $uart/control 2>/dev/null
 	done
 
-	if ! echo 1 > /sys/kernel/debug/pm_debug/enable_off_mode; then
-		exit 4
-	fi
+	echo 1 > /sys/kernel/debug/pm_debug/enable_off_mode 2>/dev/null
 }
 
 stop() {
-	if ! echo 0 > /sys/kernel/debug/pm_debug/enable_off_mode; then
-		exit 1
-	fi
+	echo 0 > /sys/kernel/debug/pm_debug/enable_off_mode 2>/dev/null
 
 	for uart in $uarts; do
-		if ! echo -1 > $uart/autosuspend_delay_ms; then
-			exit 2
-		fi
+		echo -1 > $uart/autosuspend_delay_ms 2>/dev/null
 	done
 }
 
