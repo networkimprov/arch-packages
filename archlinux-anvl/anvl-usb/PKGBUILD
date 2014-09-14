@@ -1,0 +1,35 @@
+# Maintainer: Thomas Dziedzic <gostrc@gmail.com>
+
+pkgname="anvl-usb"
+pkgver=1.0
+pkgrel=1
+pkgdesc="Enable USB peripherals"
+arch=("armv7h")
+url="https://github.com/networkimprov/usb-manager"
+license=("none")
+makedepends=('git')
+source=("anvl-usb.service"
+        "anvl-usb.sh")
+md5sums=('19d22d10335b502507a3fef671c0c34e'
+         '05340d60ccc165bf6cff73ba8cff6292')
+
+build() {
+  [ -d usb-manager ] && (pushd usb-manager; git pull; popd) || git clone https://github.com/networkimprov/usb-manager.git
+
+  cd usb-manager
+
+  make
+}
+
+package() {
+  install -D -m 644 "${srcdir}/anvl-usb.service" \
+    "${pkgdir}/etc/systemd/system/anvl-usb.service"
+
+  install -D -m 755 "${srcdir}/anvl-usb.sh" \
+    "${pkgdir}/usr/bin/anvl-usb.sh"
+
+  install -D -m 755 "${srcdir}/usb-manager/usb-manager" \
+    "${pkgdir}/usr/bin/usb-manager"
+}
+
+# vim:set ts=2 sw=2 et:
