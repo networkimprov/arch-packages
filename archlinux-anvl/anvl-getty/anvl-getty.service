@@ -1,0 +1,15 @@
+[Unit]
+Description=Serial Getty for Anvl on ttyS2 or ttyO2
+After=getty.target
+
+[Service]
+# Ignore if started as a console, check for ttyS vs ttyO, skip --keep-rate
+ExecStart=/bin/sh -c 'if /usr/bin/grep console=tty[SO] /proc/cmdline > /dev/null; then \
+ echo "console on uart, not starting";\
+ else if /usr/bin/grep ^0x4 /sys/class/tty/ttyS2/iomem_base > /dev/null; then\
+ /sbin/agetty ttyS2 115200 $TERM; else /sbin/agetty ttyO2 115200 vt102; fi; fi'
+Type=idle
+Restart=on-success
+KillMode=process
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
