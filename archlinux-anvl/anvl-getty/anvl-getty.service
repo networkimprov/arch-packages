@@ -13,3 +13,6 @@ Restart=on-success
 KillMode=process
 IgnoreSIGPIPE=no
 SendSIGHUP=yes
+
+[Install]
+WantedBy=multi-user.target

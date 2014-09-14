@@ -2,13 +2,13 @@
 
 pkgname="anvl-getty"
 pkgver=1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Serial Getty for Anvl on ttyS2 or ttyO2"
 arch=("armv7h")
 url="https://github.com/networkimprov/arch-packages"
 license=("none")
 source=("anvl-getty.service")
-md5sums=('fe8161e509b50df59788a500cae3bd44')
+md5sums=('22fcb27f5754ffe8f3b03cdafa7314ac')
 
 package() {
   install -D -m 644 "${srcdir}/anvl-getty.service" \
