@@ -4,27 +4,24 @@
 
 pkgname=sd8787_uapsta-fw
 pkgver=14.66.35.p52
-pkgrel=1
+pkgrel=2
 pkgdesc="Firmware files for Marvell's sd8787_uapsta wifi chip"
-makedepends=('git')
 arch=('any')
 url="http://git.marvell.com/?p=mwifiex-firmware.git;a=summary"
-license=('GPL2' 'GPL3' 'custom')
+license=('custom')
 conflicts=('linux-firmware')
 options=(!strip)
-source=('git://git.marvell.com/mwifiex-firmware.git#commit=3f45b8c4cc1eb1d102bc3486b19677332dd215ab')
-md5sums=('SKIP')
+source=('sd8787_uapsta.bin::http://git.marvell.com/?p=mwifiex-firmware.git;a=blob_plain;f=mrvl/sd8787_uapsta.bin;hb=HEAD'
+        'LICENCE.Marvell::http://git.marvell.com/?p=mwifiex-firmware.git;a=blob_plain;f=LICENCE.Marvell;hb=HEAD')
+md5sums=('62f2c1f3991169d901d55aea949bf801'
+         '9ddea1734a4baf3c78d845151f42a37a')
 
 package() {
-  cd mwifiex-firmware
+  install -D -m644 sd8787_uapsta.bin \
+    "${pkgdir}/usr/lib/firmware/mrvl/sd8787_uapsta.bin"
 
-  install -d -m755 "${pkgdir}/usr/lib/firmware/mrvl"
-
-  cp -a mrvl/sd8787_uapsta.bin "${pkgdir}/usr/lib/firmware/mrvl/"
-
-  install -d -m755 "${pkgdir}/usr/share/licenses/linux-firmware/"
-
-  mv {LICEN*,WHENCE} "${pkgdir}/usr/share/licenses/linux-firmware/"
+  install -D -m644 LICENCE.Marvell \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENCE.Marvell"
 }
 
 # vim:set ts=2 sw=2 et:
