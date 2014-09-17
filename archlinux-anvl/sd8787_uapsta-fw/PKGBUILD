@@ -3,7 +3,7 @@
 # based off linux-firmware from archlinux
 
 pkgname=sd8787_uapsta-fw
-pkgver=14.66.35.p52
+pkgver=14.66.9.p192
 pkgrel=1
 pkgdesc="Firmware files for Marvell's sd8787_uapsta wifi chip"
 makedepends=('git')
@@ -12,7 +12,7 @@ url="http://git.marvell.com/?p=mwifiex-firmware.git;a=summary"
 license=('GPL2' 'GPL3' 'custom')
 conflicts=('linux-firmware')
 options=(!strip)
-source=('git://git.marvell.com/mwifiex-firmware.git#commit=3f45b8c4cc1eb1d102bc3486b19677332dd215ab')
+source=('git://git.marvell.com/mwifiex-firmware.git#commit=633d06edab7a2b82efaa134ec5591cd20f9ac0a3')
 md5sums=('SKIP')
 
 package() {
