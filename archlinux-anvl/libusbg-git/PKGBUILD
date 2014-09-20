@@ -1,0 +1,44 @@
+pkgname=libusbg-git
+pkgver=0.1.0.r79.ga826d13
+pkgrel=1
+pkgdesc="USB Gadget Configfs Library"
+arch=('armv7h')
+url="https://github.com/libusbg/libusbg"
+license=('GPL' 'LGPL2.1')
+makedepends=('git')
+provides=('libusbg')
+conflicts=('libusbg')
+options=('staticlibs')
+source=('git+https://github.com/libusbg/libusbg.git'
+        'clear-udc-name.diff')
+md5sums=('SKIP'
+         '5fcb115f82e3ea5e6385e90dec9a0a30')
+
+pkgver() {
+  cd libusbg
+
+  git describe --long | sed -r 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd libusbg
+
+  patch -Np1 -i "${srcdir}/clear-udc-name.diff"
+}
+
+build() {
+  cd libusbg
+
+  autoreconf -i
+
+  ./configure \
+    --prefix=/usr
+
+  make
+}
+
+package() {
+  cd libusbg
+
+  make DESTDIR="${pkgdir}" install
+}

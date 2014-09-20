@@ -1,0 +1,20 @@
+Currently usbg_disable_gadget() does not actually write anything
+to UDC to clear it and the configured UDC name stays there.
+
+Signed-off-by: Tony Lindgren <tony@atomide.com>
+
+---
+
+Matt, maybe check if you want to have this fixed in some other way?
+
+--- a/src/usbg.c
++++ b/src/usbg.c
+@@ -1994,7 +1994,7 @@ int usbg_disable_gadget(usbg_gadget *g)
+ 
+ 	if (g) {
+ 		strcpy(g->udc, "");
+-		ret = usbg_write_string(g->path, g->name, "UDC", "");
++		ret = usbg_write_string(g->path, g->name, "UDC", "\n");
+ 	}
+ 
+ 	return ret;
