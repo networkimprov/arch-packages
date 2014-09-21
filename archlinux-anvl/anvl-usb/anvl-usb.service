@@ -1,10 +1,10 @@
 [Unit]
-Description=Enable USB peripherals
+Description=Enable USB peripherals and charger and LED control
 
 [Service]
-Type=forking
-ExecStart=/usr/bin/anvl-usb.sh start
-ExecStop=/usr/bin/anvl-usb.sh stop
+Type=idle
+ExecStart=/usr/bin/usb-manager
+Restart=always
 
 [Install]
 WantedBy=multi-user.target

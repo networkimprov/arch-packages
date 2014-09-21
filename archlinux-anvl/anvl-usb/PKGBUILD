@@ -1,7 +1,7 @@
 # Maintainer: Thomas Dziedzic <gostrc@gmail.com>
 
 pkgname="anvl-usb"
-pkgver=3.0
+pkgver=4.0
 pkgrel=1
 pkgdesc="Enable USB peripherals"
 arch=("armv7h")
@@ -12,11 +12,11 @@ makedepends=('git')
 install=${pkgname}.install
 source=("git+https://github.com/networkimprov/usb-manager.git"
         "anvl-usb.service"
-        "anvl-usb.sh"
+        "anvl-getty-usb@.service"
         "anvl-getty.service")
 md5sums=('SKIP'
-         '19d22d10335b502507a3fef671c0c34e'
-         'fc357510789e5532ec91993ce22a5ebe'
+         '6d2f20377475b201e737a2e2106462ef'
+         'c7dbfdb8a07b0c1d0bab3a2c640b1ac0'
          '22fcb27f5754ffe8f3b03cdafa7314ac')
 
 build() {
@@ -32,8 +32,8 @@ package() {
   install -D -m 644 "${srcdir}/anvl-usb.service" \
     "${pkgdir}/usr/lib/systemd/system/anvl-usb.service"
 
-  install -D -m 755 "${srcdir}/anvl-usb.sh" \
-    "${pkgdir}/usr/bin/anvl-usb.sh"
+  install -D -m 644 "${srcdir}/anvl-getty-usb@.service" \
+    "${pkgdir}/usr/lib/systemd/system/anvl-getty-usb@.service"
 
   install -D -m 755 "${srcdir}/usb-manager/usb-manager" \
     "${pkgdir}/usr/bin/usb-manager"
