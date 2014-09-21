@@ -1,0 +1,7 @@
+post_install() {
+  echo -e "ttyGS0\nttyO2\nttyS2" >> etc/securetty
+}
+
+post_remove() {
+  sed -i '/ttyGS0\|ttyO2\|ttyS2/d' etc/securetty
+}
