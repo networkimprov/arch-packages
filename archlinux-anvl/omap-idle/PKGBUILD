@@ -2,7 +2,7 @@
 
 pkgname="omap-idle"
 pkgver=1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Shell script to enable UART timeouts that otherwise will block the deeper idle states"
 arch=("armv7h")
 url="https://github.com/networkimprov/arch-packages"
@@ -14,7 +14,7 @@ md5sums=('69f0c98da6726713bbd1f34924374482'
 
 package() {
   install -D -m 644 "${srcdir}/omap-idle.service" \
-    "${pkgdir}/etc/systemd/system/omap-idle.service"
+    "${pkgdir}/usr/lib/systemd/system/omap-idle.service"
 
   install -D -m 755 "${srcdir}/omap-idle.sh" \
     "${pkgdir}/usr/bin/omap-idle.sh"
