@@ -9,7 +9,7 @@ makedepends=('git')
 provides=('libusbg')
 conflicts=('libusbg')
 options=('staticlibs')
-source=('git+https://github.com/libusbg/libusbg.git'
+source=('git+https://github.com/libusbg/libusbg.git#commit=a826d136e0e8fa53815f1ba05893e6dd74208c15'
         'clear-udc-name.diff')
 md5sums=('SKIP'
          '5fcb115f82e3ea5e6385e90dec9a0a30')
