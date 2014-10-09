@@ -2,7 +2,7 @@
 # arg 2:  the old package version
 
 KERNEL_NAME=-anvl
-KERNEL_VERSION=3.17.0-rc7-1-ANVL
+KERNEL_VERSION=3.17.0-1-ANVL
 
 post_install () {
   # updating module dependencies

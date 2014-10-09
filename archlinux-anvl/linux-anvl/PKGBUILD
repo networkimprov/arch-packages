@@ -5,17 +5,16 @@
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="Custom kernel for the pocket anvl"
-_commit="d7baf3ddcc040497ca1e1e219ec8e79fcfd57482"
-pkgver="3.17.rc7.${_commit}"
+_commit="f225256f1538a555ea2c181558be3eded41e4120"
+pkgver="3.17"
 pkgrel="1"
 arch=("armv7h")
 url="https://github.com/networkimprov/linux"
 license=("GPL2")
 makedepends=("xmlto" "docbook-xsl" "kmod" "inetutils" "bc" "git" "uboot-tools")
 options=("!strip")
-#source=("http://pkgbuild.com/~td123/linux-anvl/${pkgbase}-${pkgver}.tar.xz")
 source=("https://github.com/networkimprov/linux/archive/${_commit}.zip")
-md5sums=('9afda61d9ab117682f3d0a9c535a4d70')
+md5sums=('e2e6aa6e01d1a988dbafe6e6a8221e33')
 
 prepare() {
   # remove this for future source packages where the top level folder matches pkgbase
@@ -54,7 +53,7 @@ _package() {
   pkgdesc="The Linux Kernel and modules - ${_desc}"
   depends=('coreutils' 'sd8787_uapsta-fw' 'kmod' 'mkinitcpio>=0.7')
   optdepends=('crda: to set the correct wireless channels of your country')
-  provides=('kernel26' "linux=${pkgver}" 'aufs_friendly')
+  provides=('kernel26' "linux=${pkgver}.${_commit}" 'aufs_friendly')
   conflicts=('linux')
   replaces=('linux-mvebu')
   install=${pkgname}.install
@@ -104,7 +103,7 @@ _package() {
 
 _package-headers() {
   pkgdesc="Header files and scripts for building modules for linux kernel - ${_desc}"
-  provides=("linux-headers=${pkgver}")
+  provides=("linux-headers=${pkgver}.${_commit}")
   conflicts=('linux-headers')
   replaces=('linux-mvebu-headers')
 
