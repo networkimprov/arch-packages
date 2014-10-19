@@ -1,7 +1,7 @@
 # Maintainer: Thomas Dziedzic <gostrc@gmail.com>
 
 pkgname="anvl-usb"
-pkgver=5.0
+pkgver=6.0
 pkgrel=1
 pkgdesc="Enable USB peripherals"
 arch=("armv7h")
@@ -10,16 +10,22 @@ license=("none")
 depends=('libusbg-git')
 makedepends=('git')
 install=${pkgname}.install
-source=("git+https://github.com/networkimprov/usb-manager.git"
+source=("git+https://github.com/networkimprov/usb-manager.git#commit=c40903de456e59d86b5c7965b20d185b0b562cc9"
         "anvl-usb.service"
         "anvl-getty-usb@.service"
         "anvl-getty.service"
-        "70-power-switch-anvl.rules")
+        "70-power-switch-anvl.rules"
+        "70-charging-discharging.rules"
+        "fstrim-charging"
+        "fstrim-discharging")
 md5sums=('SKIP'
          '6d2f20377475b201e737a2e2106462ef'
          'c7dbfdb8a07b0c1d0bab3a2c640b1ac0'
          '22fcb27f5754ffe8f3b03cdafa7314ac'
-         '5b47e895f402f687409d8e852019dfe7')
+         '5b47e895f402f687409d8e852019dfe7'
+         'c90deac3a37ec468aebcd48b0d7c7ca7'
+         'bfb709a45d7ebcf713ae413c243e6c5c'
+         '817cc6d2892a27408690c33401a5d4d5')
 
 build() {
   cd usb-manager
@@ -46,6 +52,20 @@ package() {
   # https://bugs.freedesktop.org/show_bug.cgi?id=84201
   install -D -m 644 "${srcdir}/70-power-switch-anvl.rules" \
     "${pkgdir}/usr/lib/udev/rules.d/70-power-switch-anvl.rules"
+
+  # install charging/discharging handler
+
+  install -D -m 644 "${srcdir}/70-charging-discharging.rules" \
+    "${pkgdir}/usr/lib/udev/rules.d/70-charging-discharging.rules"
+
+  install -d \
+    "${pkgdir}/usr/lib/anvl-usb/charging.d" \
+    "${pkgdir}/usr/lib/anvl-usb/discharging.d"
+
+  install -m 755 "${srcdir}/fstrim-charging" \
+    "${pkgdir}/usr/lib/anvl-usb/charging.d"
+  install -m 755 "${srcdir}/fstrim-discharging" \
+    "${pkgdir}/usr/lib/anvl-usb/discharging.d"
 }
 
 # vim:set ts=2 sw=2 et:

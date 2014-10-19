@@ -1,0 +1,2 @@
+SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/systemctl /usr/lib/anvl-usb/charging.d"
+SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/run-parts /usr/lib/anvl-usb/discharging.d"
