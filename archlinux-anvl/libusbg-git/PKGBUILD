@@ -1,29 +1,21 @@
 pkgname=libusbg-git
-pkgver=0.1.0.r79.ga826d13
+pkgver=0.1.0.r122.gd800fae
 pkgrel=1
 pkgdesc="USB Gadget Configfs Library"
 arch=('armv7h')
 url="https://github.com/libusbg/libusbg"
 license=('GPL' 'LGPL2.1')
+depends=('libconfig')
 makedepends=('git')
 provides=('libusbg')
 conflicts=('libusbg')
-options=('staticlibs')
-source=('git+https://github.com/libusbg/libusbg.git#commit=a826d136e0e8fa53815f1ba05893e6dd74208c15'
-        'clear-udc-name.diff')
-md5sums=('SKIP'
-         '5fcb115f82e3ea5e6385e90dec9a0a30')
+source=('git+https://github.com/libusbg/libusbg.git#commit=d800faea4c5917f1e3cfd968ec1499bcadb16dc9')
+md5sums=('SKIP')
 
 pkgver() {
   cd libusbg
 
   git describe --long | sed -r 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
-}
-
-prepare() {
-  cd libusbg
-
-  patch -Np1 -i "${srcdir}/clear-udc-name.diff"
 }
 
 build() {
@@ -32,7 +24,8 @@ build() {
   autoreconf -i
 
   ./configure \
-    --prefix=/usr
+    --prefix=/usr \
+    --disable-static
 
   make
 }
