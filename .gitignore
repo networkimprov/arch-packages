@@ -6,5 +6,5 @@
 *.zip
 archlinux-anvl/sd8787_uapsta-fw/mwifiex-firmware/
 archlinux-anvl/libusbg-git/libusbg/
-archlinux-anvl/anvl-usb/usb-manager/
+archlinux-anvl/anvl-util/usb-manager/
 *.swp
