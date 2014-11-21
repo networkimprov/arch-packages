@@ -1,0 +1,14 @@
+#!/usr/bin/sh
+
+timers=(
+  systemd-tmpfiles-clean
+  logrotate
+  man-db
+  shadow
+  fstrim
+  )
+
+for timer in ${timers[@]}
+do
+  /usr/bin/systemctl start ${timer}.timer
+done

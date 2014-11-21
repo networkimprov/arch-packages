@@ -1,7 +1,7 @@
 # Maintainer: Thomas Dziedzic <gostrc@gmail.com>
 
 pkgname="anvl-util"
-pkgver=7.0
+pkgver=8.0
 pkgrel=1
 pkgdesc="Enable USB peripherals"
 arch=("armv7h")
@@ -20,8 +20,8 @@ source=("git+https://github.com/networkimprov/usb-manager.git#commit=c40903de456
         "anvl-getty.service"
         "70-power-switch-anvl.rules"
         "70-charging-discharging.rules"
-        "fstrim-charging"
-        "fstrim-discharging"
+        "charging"
+        "discharging"
         "omap-idle.service"
         "omap-idle.sh")
 md5sums=('SKIP'
@@ -30,8 +30,8 @@ md5sums=('SKIP'
          '22fcb27f5754ffe8f3b03cdafa7314ac'
          '5b47e895f402f687409d8e852019dfe7'
          '004df05f0daf350af95d65a8fc410358'
-         '56c3be39725a99baf7e7ec30926ecf9d'
-         '25f755b36dc1ba63c0a80318305c4bfd'
+         'aec20472b37acae45182e403d4b68876'
+         'bfd46ab61f6a06e62e3ac562115f488a'
          '69f0c98da6726713bbd1f34924374482'
          '3996e87cafe4d4e8d396e2c0d74a5dc5')
 
@@ -70,9 +70,9 @@ package() {
     "${pkgdir}/usr/lib/anvl-util/charging.d" \
     "${pkgdir}/usr/lib/anvl-util/discharging.d"
 
-  install -m 755 "${srcdir}/fstrim-charging" \
+  install -m 755 "${srcdir}/charging" \
     "${pkgdir}/usr/lib/anvl-util/charging.d"
-  install -m 755 "${srcdir}/fstrim-discharging" \
+  install -m 755 "${srcdir}/discharging" \
     "${pkgdir}/usr/lib/anvl-util/discharging.d"
 
   # install omap deep sleep support
