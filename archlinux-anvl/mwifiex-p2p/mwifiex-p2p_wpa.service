@@ -1,0 +1,12 @@
+[Unit]
+Description=WiFi P2P on mwifiex driver
+Wants=mwifiex-p2p_dhcp.service
+After=mwifiex-p2p_dhcp.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/wpa_supplicant -i p2p0 -D nl80211 -c /etc/wpa_supplicant/wpa_supplicant-p2p0.conf
+
+[Install]
+WantedBy=multi-user.target
+

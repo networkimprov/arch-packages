@@ -1,0 +1,39 @@
+# Maintainer: Thomas Dziedzic <gostrc@gmail.com>
+
+pkgname="mwifiex-p2p"
+pkgver=1.0
+pkgrel=1
+pkgdesc="WiFi P2P config for mwifiex driver"
+arch=("any")
+url="https://github.com/networkimprov/arch-packages"
+license=("none")
+depends=('wpa_supplicant'
+         'udhcp')
+source=('mwifiex-p2p_wpa.service'
+        'wpa_supplicant-p2p0.conf'
+        'mwifiex-p2p_dhcp.service'
+        'udhcpd-p2p0.conf'
+        'mwifiex-debug.sh')
+md5sums=('91d0e9004fc3bb12dc5653cb04eca868'
+         '9fe4812059c3f8e9f3cd8b6cc4549e50'
+         'e6ab7cb831eb10eb0f045afb6e909f18'
+         '985ade16f7342b5a106901fa8d0f302d'
+         '95251671b360fe9db435e2b7b524ab30')
+
+package() {
+  install -D -m 644 mwifiex-p2p_wpa.service
+    "${pkgdir}/usr/lib/systemd/system/mwifiex-p2p_wpa.service"
+
+  install -D -m 644 wpa_supplicant-p2p0.conf
+    "${pkgdir}/etc/wpa_supplicant/wpa_supplicant-p2p0.conf"
+
+  install -D -m 644 mwifiex-p2p_dhcp.service
+    "${pkgdir}/usr/lib/systemd/system/mwifiex-p2p_dhcp.service"
+
+  install -D -m 644 udhcpd-p2p0.conf
+    "${pkgdir}/etc/udhcpd-p2p0.conf"
+
+  install -D -m 755 mwifiex-debug.sh
+    "${pkgdir}/usr/bin/mwifiex-debug.sh"
+}
+
