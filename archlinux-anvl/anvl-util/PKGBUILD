@@ -1,7 +1,7 @@
 # Maintainer: Thomas Dziedzic <gostrc@gmail.com>
 
 pkgname="anvl-util"
-pkgver=8.0
+pkgver=9.0
 pkgrel=1
 pkgdesc="Enable USB peripherals"
 arch=("armv7h")
@@ -23,7 +23,8 @@ source=("git+https://github.com/networkimprov/usb-manager.git#commit=c40903de456
         "charging"
         "discharging"
         "omap-idle.service"
-        "omap-idle.sh")
+        "omap-idle.sh"
+        "mwifiex_sdio-workaround.sh")
 md5sums=('SKIP'
          '6d2f20377475b201e737a2e2106462ef'
          'c7dbfdb8a07b0c1d0bab3a2c640b1ac0'
@@ -33,7 +34,8 @@ md5sums=('SKIP'
          'aec20472b37acae45182e403d4b68876'
          'bfd46ab61f6a06e62e3ac562115f488a'
          '69f0c98da6726713bbd1f34924374482'
-         '3996e87cafe4d4e8d396e2c0d74a5dc5')
+         '3996e87cafe4d4e8d396e2c0d74a5dc5'
+         '78791bec9d02ba6c5f5d6b7d268f7b42')
 
 build() {
   cd usb-manager
@@ -81,6 +83,10 @@ package() {
 
   install -D -m 755 "${srcdir}/omap-idle.sh" \
     "${pkgdir}/usr/bin/omap-idle.sh"
+
+  # add workaround for mwifiex when sleeping
+  install -D -m 755 "${srcdir}/mwifiex_sdio-workaround.sh" \
+    "${pkgdir}/usr/lib/systemd/system-sleep/mwifiex_sdio-workaround.sh"
 }
 
 # vim:set ts=2 sw=2 et:
