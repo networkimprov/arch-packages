@@ -1,0 +1,33 @@
+# Maintainer: Liam <github@networkimprov.net>
+
+pkgname="info-anvl"
+pkgver=0.2
+pkgrel=2
+pkgdesc="Web UI for anvl"
+arch=("armv7h")
+_site="github.com/networkimprov"
+url="https://${_site}/${pkgname}"
+license=("none")
+depends=()
+makedepends=('go')
+replaces=()
+conflicts=()
+source=("${pkgname}.service")
+md5sums=('10ab856bab47fc812b583883347abc87')
+
+prepare() {
+  GOPATH="${srcdir}" go get -d -u "${_site}/${pkgname}"
+}
+
+build() {
+  GOPATH="${srcdir}" go install "${_site}/${pkgname}"
+}
+
+package() {
+  install -D -m 755 "bin/${pkgname}" "${pkgdir}/usr/bin/${pkgname}"
+
+  install -d "${pkgdir}/usr/share/${pkgname}/"
+  install -m 644 src/${_site}/${pkgname}/share/* "${pkgdir}/usr/share/${pkgname}/"
+
+  install -D -m 644 "${pkgname}.service" "${pkgdir}/usr/lib/systemd/system/${pkgname}.service"
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Anvl Web Interface
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/info-anvl /usr/share/info-anvl
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
