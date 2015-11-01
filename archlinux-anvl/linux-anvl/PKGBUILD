@@ -5,23 +5,28 @@
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="Custom kernel for the pocket anvl"
-_commit="f225256f1538a555ea2c181558be3eded41e4120"
-pkgver="3.17"
+pkgver="3.18.23"
 pkgrel="1"
 arch=("armv7h")
 url="https://github.com/networkimprov/linux"
 license=("GPL2")
-makedepends=("xmlto" "docbook-xsl" "kmod" "inetutils" "bc" "git" "uboot-tools")
+makedepends=("xmlto" "docbook-xsl" "kmod" "inetutils" "bc" "git")
 options=("!strip")
-source=("https://github.com/networkimprov/linux/archive/${_commit}.zip")
-md5sums=('e2e6aa6e01d1a988dbafe6e6a8221e33')
+source=("git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git#tag=v${pkgver}"
+        'omap2plus_defconfig'
+        'omap3-anvl.dts')
+md5sums=('SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   # remove this for future source packages where the top level folder matches pkgbase
-  mv linux-${_commit} ${pkgbase}
+  test -L ${pkgbase} || ln -s linux-stable ${pkgbase}
 
   # make sure to keep a pristine git version
   cd "${pkgbase}"
+
+  cp ${srcdir}/omap2plus_defconfig arch/arm/configs/
+  cp ${srcdir}/omap3-anvl.dts arch/arm/boot/dts/
+  sed -i 's/omap3-beagle.dtb/omap3-anvl.dtb/' arch/arm/boot/dts/Makefile
 
   # add pkgrel to extraversion
   sed -ri "s|^(EXTRAVERSION =)(.*)|\1 \2-${pkgrel}|" Makefile
@@ -53,9 +58,8 @@ _package() {
   pkgdesc="The Linux Kernel and modules - ${_desc}"
   depends=('coreutils' 'sd8787_uapsta-fw' 'kmod' 'mkinitcpio>=0.7')
   optdepends=('crda: to set the correct wireless channels of your country')
-  provides=('kernel26' "linux=${pkgver}.${_commit}" 'aufs_friendly')
+  provides=('kernel26' "linux=${pkgver}" 'aufs_friendly')
   conflicts=('linux')
-  replaces=('linux-mvebu')
   install=${pkgname}.install
 
   cd "${pkgbase}"
@@ -70,9 +74,6 @@ _package() {
   mkdir -p "${pkgdir}"/{lib/modules,lib/firmware,boot/dtbs}
   make INSTALL_MOD_PATH="${pkgdir}" modules_install
   cp arch/$KARCH/boot/zImage "${pkgdir}/boot/vmlinuz-linux-anvl"
-  cp arch/$KARCH/boot/dts/*.dtb "${pkgdir}/boot/dtbs"
-
-  # custom name for our dtb
   cp arch/$KARCH/boot/dts/omap3-anvl.dtb "${pkgdir}/boot/dtbs/anvl.dtb"
 
   # set correct depmod command for install
@@ -103,13 +104,14 @@ _package() {
 
 _package-headers() {
   pkgdesc="Header files and scripts for building modules for linux kernel - ${_desc}"
-  provides=("linux-headers=${pkgver}.${_commit}")
+  provides=("linux-headers=${pkgver}")
   conflicts=('linux-headers')
-  replaces=('linux-mvebu-headers')
-
-  install -dm755 "${pkgdir}/usr/lib/modules/${_kernver}"
+  return 0 # look at board-specific headers for ideas
 
   cd "${pkgbase}"
+
+  #install -dm755 "${pkgdir}/usr/lib/modules/${_kernver}"
+
   install -D -m644 Makefile \
     "${pkgdir}/usr/lib/modules/${_kernver}/build/Makefile"
   install -D -m644 kernel/Makefile \
@@ -125,13 +127,9 @@ _package-headers() {
   done
 
   # copy arch includes for external modules
-  mkdir -p ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH
+  mkdir -p ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/{,mach-omap2,plat-omap}
   cp -a arch/$KARCH/include ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/
-  mkdir -p ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/mach-omap2
   cp -a arch/$KARCH/mach-omap2/include ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/mach-omap2/
-  mkdir -p ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/mach-mvebu
-  cp -a arch/$KARCH/mach-mvebu/include ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/mach-mvebu/
-  mkdir -p ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/plat-omap
   cp -a arch/$KARCH/plat-omap/include ${pkgdir}/usr/lib/modules/${_kernver}/build/arch/$KARCH/plat-omap/
 
   # copy files necessary for later builds, like nvidia and vmware
