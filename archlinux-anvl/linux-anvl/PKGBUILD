@@ -5,28 +5,28 @@
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="Custom kernel for the pocket anvl"
-pkgver="3.18.23"
+pkgver="4.3.0" # must use x.y.0 for x.y so package matches uname -r
 pkgrel="1"
-arch=("armv7h")
+arch=(any)
 url="https://github.com/networkimprov/linux"
 license=("GPL2")
-makedepends=("xmlto" "docbook-xsl" "kmod" "inetutils" "bc" "git")
+makedepends=("kmod" "inetutils" "bc" "git")
 options=("!strip")
-source=("git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git#tag=v${pkgver}"
-        'omap2plus_defconfig'
-        'omap3-anvl.dts')
-md5sums=('SKIP' 'SKIP' 'SKIP')
+_tag=anvl-v$(echo $pkgver | sed 's|\(\.[0-9]*\)\.0|\1|')
+source=("https://github.com/networkimprov/linux/archive/${_tag}.tar.gz"
+        'anvl-modules.conf'
+        'anvl-blacklist.conf'
+        'nspawn-config')
+md5sums=('SKIP' SKIP SKIP SKIP)
 
 prepare() {
-  # remove this for future source packages where the top level folder matches pkgbase
-  test -L ${pkgbase} || ln -s linux-stable ${pkgbase}
-
-  # make sure to keep a pristine git version
+  test -L ${pkgbase} || ln -s linux-${_tag} ${pkgbase}
   cd "${pkgbase}"
 
-  cp ${srcdir}/omap2plus_defconfig arch/arm/configs/
-  cp ${srcdir}/omap3-anvl.dts arch/arm/boot/dts/
-  sed -i 's/omap3-beagle.dtb/omap3-anvl.dtb/' arch/arm/boot/dts/Makefile
+  #cat ${srcdir}/nspawn-config >> arch/arm/configs/omap2plus_defconfig
+  #cp ${srcdir}/omap2plus_defconfig arch/arm/configs/
+  #cp ${srcdir}/omap3-anvl.dts arch/arm/boot/dts/
+  #sed -i 's/omap3-beagle.dtb/omap3-anvl.dtb/' arch/arm/boot/dts/Makefile
 
   # add pkgrel to extraversion
   sed -ri "s|^(EXTRAVERSION =)(.*)|\1 \2-${pkgrel}|" Makefile
@@ -37,13 +37,15 @@ prepare() {
 
 build() {
   cd "${pkgbase}"
+  export ARCH=arm
+  export CROSS_COMPILE=arm-none-eabi-
 
   # use our custom configuration
   make omap2plus_defconfig
 
   # set the local version
   sed \
-    -e 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-ANVL"/' \
+    -e 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-ARCH"/' \
     -e 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/' \
     -i .config
 
@@ -51,7 +53,7 @@ build() {
   make prepare
 
   # build!
-  make ${MAKEFLAGS} zImage modules dtbs
+  make -j4 ${MAKEFLAGS} zImage modules dtbs
 }
 
 _package() {
@@ -59,12 +61,14 @@ _package() {
   depends=('coreutils' 'sd8787_uapsta-fw' 'kmod' 'mkinitcpio>=0.7')
   optdepends=('crda: to set the correct wireless channels of your country')
   provides=('kernel26' "linux=${pkgver}" 'aufs_friendly')
-  conflicts=('linux')
+  conflicts=('linux' 'linux-anvl')
+  replaces=('linux-anvl')
   install=${pkgname}.install
 
   cd "${pkgbase}"
 
   KARCH=arm
+  export ARCH=$KARCH
 
   # get kernel version
   _kernver="$(make kernelrelease)"
@@ -75,6 +79,9 @@ _package() {
   make INSTALL_MOD_PATH="${pkgdir}" modules_install
   cp arch/$KARCH/boot/zImage "${pkgdir}/boot/vmlinuz-linux-anvl"
   cp arch/$KARCH/boot/dts/omap3-anvl.dtb "${pkgdir}/boot/dtbs/anvl.dtb"
+
+  install -Dm 644 ${srcdir}/anvl-modules.conf ${pkgdir}/etc/modules-load.d/anvl-modules.conf
+  install -Dm 644 ${srcdir}/anvl-blacklist.conf ${pkgdir}/etc/modprobe.d/anvl-blacklist.conf
 
   # set correct depmod command for install
   sed \
@@ -89,10 +96,10 @@ _package() {
   # gzip -9 all modules to save 100MB of space
   find "${pkgdir}" -name '*.ko' |xargs -P 2 -n 1 gzip -9
   # make room for external modules
-  ln -s "../extramodules-${_basekernel}-${_kernelname:-ANVL}" "${pkgdir}/lib/modules/${_kernver}/extramodules"
+  ln -s "../extramodules-${_basekernel}-${_kernelname:-ARCH}" "${pkgdir}/lib/modules/${_kernver}/extramodules"
   # add real version for building modules and running depmod from post_install/upgrade
-  mkdir -p "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ANVL}"
-  echo "${_kernver}" > "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ANVL}/version"
+  mkdir -p "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}"
+  echo "${_kernver}" > "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}/version"
 
   # Now we call depmod...
   depmod -b "$pkgdir" -F System.map "$_kernver"
