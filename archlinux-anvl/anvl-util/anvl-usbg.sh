@@ -6,12 +6,12 @@ if [ "$USER" != root ]; then
   echo "Start with sudo"
   exit 1
 elif [ "$1" = stop -a $# = 1 ]; then
-  if [ ! -d /config/usb_gadget/g1 ]; then
+  if [ ! -d /sys/kernel/config/usb_gadget/g1 ]; then
     echo "Already stopped"
     exit 1
   fi
-  echo > /config/usb_gadget/g1/UDC
-  rm -rf /config/usb_gadget/g1
+  echo > /sys/kernel/config/usb_gadget/g1/UDC
+  rm -rf /sys/kernel/config/usb_gadget/g1
   exit 0;
 elif [ "$1" != start -a "$1" != pause ] || [ $# -gt 3 ]; then
   echo "Usage: $0 start|pause [serialno [storage]] ; $0 stop"
@@ -32,12 +32,12 @@ else
   serialno=noserialnumber
 fi
 
-if [ ! -d /config/usb_gadget/g1 ]; then
-  if [ ! -d /config ]; then
-    mount -t configfs none /config
+if [ ! -d /sys/kernel/config/usb_gadget/g1 ]; then
+  if [ ! -d /sys/kernel/config ]; then
+    mount -t configfs none /sys/kernel/config
   fi
-  mkdir /config/usb_gadget/g1
-  cd /config/usb_gadget/g1
+  mkdir /sys/kernel/config/usb_gadget/g1
+  cd /sys/kernel/config/usb_gadget/g1
 
   echo "$product" > idProduct
   echo "$vendor" > idVendor
@@ -77,7 +77,7 @@ if [ ! -d /config/usb_gadget/g1 ]; then
 fi
 
 if [ "$1" = pause ]; then
-  echo > /config/usb_gadget/g1/UDC
+  echo > /sys/kernel/config/usb_gadget/g1/UDC
 else
-  echo "musb-hdrc.0.auto" > /config/usb_gadget/g1/UDC
+  echo "musb-hdrc.0.auto" > /sys/kernel/config/usb_gadget/g1/UDC
 fi
