@@ -1,38 +1,56 @@
-# Maintainer: Thomas Dziedzic <gostrc@gmail.com>
+# Maintainer: Liam <arch@networkimprov.net>
 
 # based off of https://github.com/archlinuxarm/PKGBUILDs/blob/master/core/linux-armv7/PKGBUILD
 
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
-_desc="Custom kernel for the pocket anvl"
-pkgver="4.3.0" # must use x.y.0 for x.y so package matches uname -r
+_desc="for pocket anvl"
+pkgver="4.7.1" # must use x.y.0 for x.y so package matches uname -r
 pkgrel="1"
-arch=(any)
+arch=('any')
 url="https://github.com/networkimprov/linux"
 license=("GPL2")
 makedepends=("kmod" "inetutils" "bc" "git")
 options=("!strip")
-_tag=anvl-v$(echo $pkgver | sed 's|\(\.[0-9]*\)\.0|\1|')
-source=("https://github.com/networkimprov/linux/archive/${_tag}.tar.gz"
-        'anvl-modules.conf'
+_linux=linux-$(echo $pkgver | sed 's|\.[0-9]*$||')
+source=("https://cdn.kernel.org/pub/linux/kernel/v4.x/${_linux}.tar.xz"
+        #"${_linux}.tar.xz::https://cdn.kernel.org/pub/linux/kernel/v4.x/testing/linux-4.4-rc4.tar.xz"
+        "https://cdn.kernel.org/pub/linux/kernel/v4.x/patch-${pkgver}.xz"
+        #'drivers-power-bq27x00-battery.patch'
+        'omap3-anvl.dts'
+        'insert-dts.patch'
         'anvl-blacklist.conf'
-        'nspawn-config')
-md5sums=('SKIP' SKIP SKIP SKIP)
+        'anvl-modules.conf')
+md5sums=(SKIP
+         #SKIP
+         SKIP #'62e24c6088bada18cd785f5080b3866b' # patch-n.n.0.xz
+         #SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP)
 
 prepare() {
-  test -L ${pkgbase} || ln -s linux-${_tag} ${pkgbase}
-  cd "${pkgbase}"
+  if [ -d linux-*-rc* ]; then
+    mv linux-*-rc* ${_linux}
+    sed -ri ${_linux}/Makefile \
+        -e "s|^(SUBLEVEL =).*|\1 ${pkgver#*.*.}|" \
+        -e "s|^(EXTRAVERSION =).*|\1|"
+  fi
+  pushd ${_linux}
 
-  #cat ${srcdir}/nspawn-config >> arch/arm/configs/omap2plus_defconfig
-  #cp ${srcdir}/omap2plus_defconfig arch/arm/configs/
-  #cp ${srcdir}/omap3-anvl.dts arch/arm/boot/dts/
-  #sed -i 's/omap3-beagle.dtb/omap3-anvl.dtb/' arch/arm/boot/dts/Makefile
+  git apply ${srcdir}/patch-${pkgver} ${srcdir}/*.patch
+  cp ${srcdir}/omap3-anvl.dts arch/arm/boot/dts/
 
   # add pkgrel to extraversion
   sed -ri "s|^(EXTRAVERSION =)(.*)|\1 \2-${pkgrel}|" Makefile
 
   # don't run depmod on 'make install'. We'll do this ourselves in packaging
   sed -i '2iexit 0' scripts/depmod.sh
+
+  popd
+  rm -rf ${pkgbase}
+  mv ${_linux} ${pkgbase}
 }
 
 build() {
@@ -61,8 +79,7 @@ _package() {
   depends=('coreutils' 'sd8787_uapsta-fw' 'kmod' 'mkinitcpio>=0.7')
   optdepends=('crda: to set the correct wireless channels of your country')
   provides=('kernel26' "linux=${pkgver}" 'aufs_friendly')
-  conflicts=('linux' 'linux-anvl')
-  replaces=('linux-anvl')
+  conflicts=('linux' 'linux-armv7')
   install=${pkgname}.install
 
   cd "${pkgbase}"

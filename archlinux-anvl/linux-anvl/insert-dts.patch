@@ -1,0 +1,12 @@
+diff --git a/arch/arm/boot/dts/Makefile b/arch/arm/boot/dts/Makefile
+index bb8fa02..12e5f8b 100644
+--- a/arch/arm/boot/dts/Makefile
++++ b/arch/arm/boot/dts/Makefile
+@@ -389,6 +389,7 @@ dtb-$(CONFIG_ARCH_OMAP3) += \
+ 	am3517_mt_ventoux.dtb \
+ 	logicpd-torpedo-37xx-devkit.dtb \
+ 	omap3430-sdp.dtb \
++	omap3-anvl.dtb \
+ 	omap3-beagle.dtb \
+ 	omap3-beagle-xm.dtb \
+ 	omap3-beagle-xm-ab.dtb \

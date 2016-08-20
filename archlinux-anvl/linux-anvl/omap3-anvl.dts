@@ -47,10 +47,13 @@
 
 	leds {
 		compatible = "gpio-leds";
+		pinctrl-0 = <&led_pin>;
+		pinctrl-names = "default";
+
 		heartbeat {
 			label = "anvl::cpu0";
 			gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;	/* gpio14 */
-			linux,default-trigger = "cpu0";
+			linux,default-trigger = "none";
 		};
 	};
 
@@ -135,6 +138,12 @@
 };
 
 &omap3_pmx_core2 {
+	led_pin: pinmux_led_pin {
+		pinctrl-single,pins = <
+			OMAP3630_CORE2_IOPAD(0x25dc, PIN_OUTPUT | MUX_MODE4)
+		>;
+	};
+
 	mmc3_core2_pins: pinmux_mmc3_core2_pins {
 		pinctrl-single,pins = <
 			OMAP3630_CORE2_IOPAD(0x25d4, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_clk */
@@ -240,19 +249,15 @@
 	};
 };
 
-&i2c2 {
-	clock-frequency = <400000>;
-
-	bq24190: charger@6b {
-		reg = <0x6b>;
-		compatible = "ti,bq24190";
-		interrupt-parent = <&gpio5>;
-		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;	/* gpio152 */
-	};
-};
-
 #include "twl4030.dtsi"
 #include "twl4030_omap3.dtsi"
+
+/* Used by PCA9632 LED controller */
+&vaux2 {
+	regulator-min-microvolt = <2500000>;
+	regulator-max-microvolt = <2500000>;
+	regulator-always-on;
+};
 
 &i2c2 {
 	clock-frequency = <400000>;
@@ -284,6 +289,18 @@
 			reg = <3>;
 			linux,default-trigger = "none";
 		};
+	};
+
+	bq27425: charger@55 {
+		reg = <0x55>;
+		compatible = "ti,bq27425";
+	};
+
+	bq24190: charger@6b {
+		reg = <0x6b>;
+		compatible = "ti,bq24190";
+		interrupt-parent = <&gpio5>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;	/* gpio152 */
 	};
 };
 
