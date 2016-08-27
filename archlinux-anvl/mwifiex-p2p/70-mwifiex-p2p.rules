@@ -1,0 +1,2 @@
+KERNEL=="mlan0", ACTION=="add", RUN+="/usr/bin/iw phy phy0 interface add p2p0 type __p2pcl"
+

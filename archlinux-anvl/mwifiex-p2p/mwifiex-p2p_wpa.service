@@ -6,6 +6,8 @@ After=mwifiex-p2p_dhcp.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/wpa_supplicant -i p2p0 -D nl80211 -c /etc/wpa_supplicant/wpa_supplicant-p2p0.conf
+ExecStartPost=/usr/bin/bash -c 'while [ ! -S /run/wpa_supplicant/p2p0 ]; do sleep 1; done'
+ExecStartPost=/usr/bin/wpa_cli -i p2p0 p2p_ext_listen 75 1500
 
 [Install]
 WantedBy=multi-user.target
