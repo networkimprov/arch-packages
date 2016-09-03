@@ -1,0 +1,99 @@
+From 08aaef6e913cb928c50c8d01a85f0b13091996e0 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Fri, 2 Sep 2016 13:42:08 -0700
+Subject: [PATCH] Hack to emit bq24190-vbus uevent when vbus_stat changes
+
+---
+ drivers/power/bq24190_charger.c | 30 +++++++++++++++++++++++++++---
+ 1 file changed, 27 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index f5746b9..2cb43de 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -153,6 +153,7 @@ struct bq24190_dev_info {
+ 	struct i2c_client		*client;
+ 	struct device			*dev;
+ 	struct power_supply		*charger;
++	struct power_supply		*vbus;
+ 	struct power_supply		*battery;
+ 	char				model_name[I2C_NAME_SIZE];
+ 	kernel_ulong_t			model;
+@@ -928,6 +929,17 @@ static const struct power_supply_desc bq24190_charger_desc = {
+ 	.property_is_writeable	= bq24190_charger_property_is_writeable,
+ };
+ 
++/* Hack an alias for use in vbus events -LB */
++static const struct power_supply_desc bq24190_vbus_desc = {
++	.name			= "bq24190-vbus",
++	.type			= POWER_SUPPLY_TYPE_USB,
++	.properties		= bq24190_charger_properties,
++	.num_properties		= ARRAY_SIZE(bq24190_charger_properties),
++	.get_property		= bq24190_charger_get_property,
++	.set_property		= bq24190_charger_set_property,
++	.property_is_writeable	= bq24190_charger_property_is_writeable,
++};
++
+ /* Battery power supply property routines */
+ 
+ static int bq24190_battery_get_status(struct bq24190_dev_info *bdi,
+@@ -1197,7 +1209,7 @@ static const struct power_supply_desc bq24190_battery_desc = {
+ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ {
+ 	struct bq24190_dev_info *bdi = data;
+-	bool alert_userspace = false;
++	bool alert_userspace = false, vbus_changed = false;
+ 	u8 ss_reg = 0, f_reg = 0;
+ 	int ret;
+ 
+@@ -1210,6 +1222,8 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 	}
+ 
+ 	if (ss_reg != bdi->ss_reg) {
++		if ((ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK) != (bdi->ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK))
++			vbus_changed = true;
+ 		/*
+ 		 * The device is in host mode so when PG_STAT goes from 1->0
+ 		 * (i.e., power removed) HIZ needs to be disabled.
+@@ -1262,6 +1276,8 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 		if (!bdi->first_time) {
+ 			power_supply_changed(bdi->charger);
+ 			power_supply_changed(bdi->battery);
++			if (vbus_changed)
++				power_supply_changed(bdi->vbus);
+ 		} else {
+ 			bdi->first_time = false;
+ 		}
+@@ -1429,15 +1445,22 @@ static int bq24190_probe(struct i2c_client *client,
+ 		ret = PTR_ERR(bdi->battery);
+ 		goto out3;
+ 	}
++	bdi->vbus = power_supply_register(dev, &bq24190_vbus_desc, &charger_cfg);
++	if (IS_ERR(bdi->vbus)) {
++		dev_err(dev, "Can't register vbus\n");
++		ret = PTR_ERR(bdi->vbus);
++		goto out4;
++	}
+ 
+ 	ret = bq24190_sysfs_create_group(bdi);
+ 	if (ret) {
+ 		dev_err(dev, "Can't create sysfs entries\n");
+-		goto out4;
++		goto out5;
+ 	}
+ 
+ 	return 0;
+-
++out5:
++	power_supply_unregister(bdi->vbus);
+ out4:
+ 	power_supply_unregister(bdi->battery);
+ out3:
+@@ -1462,6 +1485,7 @@ static int bq24190_remove(struct i2c_client *client)
+ 	bq24190_sysfs_remove_group(bdi);
+ 	power_supply_unregister(bdi->battery);
+ 	power_supply_unregister(bdi->charger);
++	power_supply_unregister(bdi->vbus);
+ 	pm_runtime_disable(bdi->dev);
+ 
+ 	if (bdi->gpio_int)
