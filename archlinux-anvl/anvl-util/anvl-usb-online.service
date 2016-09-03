@@ -1,0 +1,18 @@
+[Unit]
+Description=USB gadget and tty
+Requires=anvl-gadget.service
+After=anvl-gadget.service
+Wants=serial-getty@ttyGS0.service
+Before=serial-getty@ttyGS0.service
+
+[Service]
+Type=oneshot
+Environment=USER=root
+ExecStart=/usr/bin/anvl-timers.sh start
+ExecStart=/usr/bin/anvl-otg.sh set
+ExecStop=/usr/bin/anvl-otg.sh clear
+ExecStop=/usr/bin/anvl-timers.sh stop
+RemainAfterExit=yes
+
+[Install]
+

@@ -1,92 +1,61 @@
-# Maintainer: Thomas Dziedzic <gostrc@gmail.com>
+# Maintainer: Liam <pkgbuild@networkimprov.net>
 
 pkgname="anvl-util"
-pkgver=9.0
-pkgrel=1
-pkgdesc="Enable USB peripherals"
-arch=("armv7h")
-url="https://github.com/networkimprov/usb-manager"
+pkgver=10
+pkgrel=4
+pkgdesc="Anvl-specific utilities"
+arch=("any")
+url="https://github.com/networkimprov/arch-packages"
 license=("none")
-depends=('libusbg-git')
-makedepends=('git')
+depends=()
+makedepends=()
 install=${pkgname}.install
-replaces=('omap-idle'
-          'anvl-usb')
-conflicts=('omap-idle'
-          'anvl-usb')
-source=("git+https://github.com/networkimprov/usb-manager.git#commit=c40903de456e59d86b5c7965b20d185b0b562cc9"
-        "anvl-usb.service"
-        "anvl-getty-usb@.service"
-        "anvl-getty.service"
-        "70-power-switch-anvl.rules"
-        "70-charging-discharging.rules"
-        "charging"
-        "discharging"
-        "omap-idle.service"
-        "omap-idle.sh"
-        "mwifiex_sdio-workaround.sh")
-md5sums=('SKIP'
-         '6d2f20377475b201e737a2e2106462ef'
-         'c7dbfdb8a07b0c1d0bab3a2c640b1ac0'
-         '22fcb27f5754ffe8f3b03cdafa7314ac'
-         '5b47e895f402f687409d8e852019dfe7'
-         '004df05f0daf350af95d65a8fc410358'
-         'aec20472b37acae45182e403d4b68876'
-         'bfd46ab61f6a06e62e3ac562115f488a'
+source=('anvl-gadget.service'
+        'anvl-gadget.sh'
+        'ethernet-usb'
+        'anvl-usb-online.service'
+        '70-usb-online.rules'
+        'anvl-battery-led.sh'
+        'anvl-otg.sh'
+        'anvl-getty.service'
+        'anvl-timers.sh'
+        'omap-idle.service'
+        'omap-idle.sh'
+        'mwifiex_sdio-workaround.sh')
+md5sums=(SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP
+         SKIP
          '69f0c98da6726713bbd1f34924374482'
          '3996e87cafe4d4e8d396e2c0d74a5dc5'
          '78791bec9d02ba6c5f5d6b7d268f7b42')
 
-build() {
-  cd usb-manager
-
-  make dynamic
-}
-
 package() {
-  install -D -m 644 "${srcdir}/anvl-getty.service" \
-    "${pkgdir}/usr/lib/systemd/system/anvl-getty.service"
+  install -Dm 644 "anvl-gadget.service" -t "${pkgdir}/usr/lib/systemd/system/"
+  install -Dm 755 "anvl-gadget.sh" -t "${pkgdir}/usr/bin/"
+  install -Dm 644 "ethernet-usb" -t "${pkgdir}/etc/netctl/"
 
-  install -D -m 644 "${srcdir}/anvl-usb.service" \
-    "${pkgdir}/usr/lib/systemd/system/anvl-usb.service"
+  install -Dm 644 "anvl-getty.service" -t "${pkgdir}/usr/lib/systemd/system/"
+  install -dm 755 "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires"
+  ln -s ../anvl-usb-online.service \
+    "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires/"
 
-  install -D -m 644 "${srcdir}/anvl-getty-usb@.service" \
-    "${pkgdir}/usr/lib/systemd/system/anvl-getty-usb@.service"
+  install -Dm 644 "70-usb-online.rules" -t "${pkgdir}/usr/lib/udev/rules.d/"
+  install -Dm 755 "anvl-battery-led.sh" -t "${pkgdir}/usr/bin/"
+  install -Dm 644 "anvl-usb-online.service" -t "${pkgdir}/usr/lib/systemd/system/"
+  install -Dm 755 "anvl-timers.sh" -t "${pkgdir}/usr/bin/"
+  install -Dm 755 "anvl-otg.sh" -t "${pkgdir}/usr/bin/"
 
-  install -D -m 755 "${srcdir}/usb-manager/usb-manager" \
-    "${pkgdir}/usr/bin/usb-manager"
-
-  # fix enable power switch:
-  # https://github.com/networkimprov/arch-packages/issues/11
-  # upstream report:
-  # https://bugs.freedesktop.org/show_bug.cgi?id=84201
-  install -D -m 644 "${srcdir}/70-power-switch-anvl.rules" \
-    "${pkgdir}/usr/lib/udev/rules.d/70-power-switch-anvl.rules"
-
-  # install charging/discharging handler
-
-  install -D -m 644 "${srcdir}/70-charging-discharging.rules" \
-    "${pkgdir}/usr/lib/udev/rules.d/70-charging-discharging.rules"
-
-  install -d \
-    "${pkgdir}/usr/lib/anvl-util/charging.d" \
-    "${pkgdir}/usr/lib/anvl-util/discharging.d"
-
-  install -m 755 "${srcdir}/charging" \
-    "${pkgdir}/usr/lib/anvl-util/charging.d"
-  install -m 755 "${srcdir}/discharging" \
-    "${pkgdir}/usr/lib/anvl-util/discharging.d"
-
-  # install omap deep sleep support
-  install -D -m 644 "${srcdir}/omap-idle.service" \
-    "${pkgdir}/usr/lib/systemd/system/omap-idle.service"
-
-  install -D -m 755 "${srcdir}/omap-idle.sh" \
-    "${pkgdir}/usr/bin/omap-idle.sh"
+  install -Dm 644 "omap-idle.service" -t "${pkgdir}/usr/lib/systemd/system/"
+  install -Dm 755 "omap-idle.sh" -t "${pkgdir}/usr/bin/"
 
   # add workaround for mwifiex when sleeping
-  install -D -m 755 "${srcdir}/mwifiex_sdio-workaround.sh" \
-    "${pkgdir}/usr/lib/systemd/system-sleep/mwifiex_sdio-workaround.sh"
+  install -Dm 755 "mwifiex_sdio-workaround.sh" -t "${pkgdir}/usr/lib/systemd/system-sleep/"
 }
 
 # vim:set ts=2 sw=2 et:

@@ -1,0 +1,12 @@
+[Unit]
+Description=Anvl USB composite device
+Before=netctl@ethernet\x2dusb.service
+Wants=netctl@ethernet\x2dusb.service
+
+[Service]
+Type=oneshot
+Environment=USER=root
+ExecStart=/usr/bin/anvl-gadget.sh start
+ExecStop=/usr/bin/anvl-gadget.sh stop
+RemainAfterExit=yes
+

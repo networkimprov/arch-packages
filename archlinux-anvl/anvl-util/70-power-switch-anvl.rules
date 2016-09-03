@@ -1,5 +1,0 @@
-ACTION=="remove", GOTO="power_switch_end"
-
-SUBSYSTEMS=="input", ATTRS{name}=="twl4030_pwrbutton", TAG+="power-switch"
-
-LABEL="power_switch_end"

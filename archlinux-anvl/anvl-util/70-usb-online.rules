@@ -1,0 +1,8 @@
+# uevents from branch anvl-v4.7-hack_bq24190
+KERNEL=="bq24190-vbus", ATTR{online}=="1", RUN+="/usr/bin/systemctl start anvl-usb-online"
+KERNEL=="bq24190-vbus", ATTR{online}=="0", RUN+="/usr/bin/systemctl stop anvl-usb-online"
+
+KERNEL=="bq24190-battery", ATTR{online}=="1", ENV{BATTERY_STATE}="$attr{status}", RUN+="/usr/bin/anvl-battery-led.sh"
+KERNEL=="bq24190-battery", ATTR{online}=="0", ENV{BATTERY_STATE}="None", RUN+="/usr/bin/anvl-battery-led.sh"
+
+KERNEL=="bq24190-charger", ATTR{f_vbus_stat}=="0", ATTR{f_pg_stat}=="1", RUN+="/bin/bash -c 'echo pg > /dev/console'"
