@@ -1,5 +1,5 @@
 [Unit]
-Description=Enable deeper idle states
+Description=OMAP idle states
 
 [Service]
 Type=oneshot

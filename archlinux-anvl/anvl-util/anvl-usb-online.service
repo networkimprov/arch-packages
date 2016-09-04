@@ -1,18 +1,15 @@
 [Unit]
-Description=USB gadget and tty
-Requires=anvl-gadget.service
-After=anvl-gadget.service
+Description=Anvl USB online
 Wants=serial-getty@ttyGS0.service
-Before=serial-getty@ttyGS0.service
+# Wants= *.timer, handled by PKGBUILD
 
 [Service]
 Type=oneshot
 Environment=USER=root
-ExecStart=/usr/bin/anvl-timers.sh start
 ExecStart=/usr/bin/anvl-otg.sh set
 ExecStop=/usr/bin/anvl-otg.sh clear
-ExecStop=/usr/bin/anvl-timers.sh stop
 RemainAfterExit=yes
 
 [Install]
-
+# started by udev rule on usb-connect
+# RequiredBy= serial-getty@ttyGS0.service *.timer, handled by PKGBUILD

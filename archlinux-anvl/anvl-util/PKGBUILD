@@ -2,7 +2,7 @@
 
 pkgname="anvl-util"
 pkgver=10
-pkgrel=4
+pkgrel=5
 pkgdesc="Anvl-specific utilities"
 arch=("any")
 url="https://github.com/networkimprov/arch-packages"
@@ -18,7 +18,6 @@ source=('anvl-gadget.service'
         'anvl-battery-led.sh'
         'anvl-otg.sh'
         'anvl-getty.service'
-        'anvl-timers.sh'
         'omap-idle.service'
         'omap-idle.sh'
         'mwifiex_sdio-workaround.sh')
@@ -31,28 +30,39 @@ md5sums=(SKIP
          SKIP
          SKIP
          SKIP
-         '69f0c98da6726713bbd1f34924374482'
          '3996e87cafe4d4e8d396e2c0d74a5dc5'
          '78791bec9d02ba6c5f5d6b7d268f7b42')
 
 package() {
+  install -dm 755 "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires"
+  ln -s ../anvl-usb-online.service ../anvl-gadget.service \
+    "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires/"
+
+  install -dm 755 "${pkgdir}/usr/lib/systemd/system/netctl@ethernet\x2dusb.service.requires"
+  ln -s ../anvl-gadget.service \
+    "${pkgdir}/usr/lib/systemd/system/netctl@ethernet\x2dusb.service.requires/"
+
+  # timers: started by anvl-usb-online and stopped when it stops
+  install -dm 755 "${pkgdir}/usr/lib/systemd/system/anvl-usb-online.service.wants"
+  for tmr in systemd-tmpfiles-clean logrotate man-db shadow fstrim; do
+    ln -s ../${tmr}.timer "${pkgdir}/usr/lib/systemd/system/anvl-usb-online.service.wants/"
+    install -dm 755 "${pkgdir}/usr/lib/systemd/system/${tmr}.timer.requires"
+    ln -s ../anvl-usb-online.service "${pkgdir}/usr/lib/systemd/system/${tmr}.timer.requires/"
+  done
+
   install -Dm 644 "anvl-gadget.service" -t "${pkgdir}/usr/lib/systemd/system/"
   install -Dm 755 "anvl-gadget.sh" -t "${pkgdir}/usr/bin/"
   install -Dm 644 "ethernet-usb" -t "${pkgdir}/etc/netctl/"
 
-  install -Dm 644 "anvl-getty.service" -t "${pkgdir}/usr/lib/systemd/system/"
-  install -dm 755 "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires"
-  ln -s ../anvl-usb-online.service \
-    "${pkgdir}/usr/lib/systemd/system/serial-getty@ttyGS0.service.requires/"
-
   install -Dm 644 "70-usb-online.rules" -t "${pkgdir}/usr/lib/udev/rules.d/"
   install -Dm 755 "anvl-battery-led.sh" -t "${pkgdir}/usr/bin/"
   install -Dm 644 "anvl-usb-online.service" -t "${pkgdir}/usr/lib/systemd/system/"
-  install -Dm 755 "anvl-timers.sh" -t "${pkgdir}/usr/bin/"
   install -Dm 755 "anvl-otg.sh" -t "${pkgdir}/usr/bin/"
 
   install -Dm 644 "omap-idle.service" -t "${pkgdir}/usr/lib/systemd/system/"
   install -Dm 755 "omap-idle.sh" -t "${pkgdir}/usr/bin/"
+
+  install -Dm 644 "anvl-getty.service" -t "${pkgdir}/usr/lib/systemd/system/"
 
   # add workaround for mwifiex when sleeping
   install -Dm 755 "mwifiex_sdio-workaround.sh" -t "${pkgdir}/usr/lib/systemd/system-sleep/"

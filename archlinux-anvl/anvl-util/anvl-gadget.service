@@ -1,5 +1,6 @@
 [Unit]
 Description=Anvl USB composite device
+Before=serial-getty@ttyGS0.service
 Before=netctl@ethernet\x2dusb.service
 Wants=netctl@ethernet\x2dusb.service
 
@@ -10,3 +11,6 @@ ExecStart=/usr/bin/anvl-gadget.sh start
 ExecStop=/usr/bin/anvl-gadget.sh stop
 RemainAfterExit=yes
 
+[Install]
+WantedBy=multi-user.target
+# RequiredBy= serial-getty@ttyGS0.service netctl@ethernet\x2dusb.service, handled by PKGBUILD
