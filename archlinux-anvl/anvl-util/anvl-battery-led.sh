@@ -10,7 +10,7 @@ case "$BATTERY_STATE" in
 'Discharging')
   color=green ; on=70  ; off=2930 ;;
 'Full')
-  color=green ; on=850 ; off=150 ;;
+  color=green ; on=1110 ; off=200 ;;
 'Not charging')
   color=red   ; on=70  ; off=2390 ;;
 'None')
