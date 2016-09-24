@@ -1,0 +1,12 @@
+[Unit]
+Description=p2phostd for WiFi P2P on mwifiex driver
+Requires=mwifiex-p2p_wpa.service
+After=mwifiex-p2p_wpa.service
+Requires=mwifiex-p2p_dhcp.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/p2phostd /run/wpa_supplicant/p2p0 75 1500 11111111
+
+[Install]
+WantedBy=multi-user.target

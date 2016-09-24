@@ -1,10 +1,11 @@
 # Maintainer: Liam <arch@networkimprov.net>
 
 pkgname="mwifiex-p2p"
-pkgver=1.2
+pkgver=1.3
 pkgrel=2
+_wpasup=wpa_supplicant-2.5
 pkgdesc="WiFi P2P config for mwifiex driver"
-arch=("any")
+arch=('armv7h')
 url="https://github.com/networkimprov/arch-packages"
 license=("none")
 depends=('wpa_supplicant'
@@ -14,14 +15,29 @@ source=('mwifiex-p2p_wpa.service'
         'wpa_supplicant-p2p0.conf'
         'mwifiex-p2p_dhcp.service'
         'udhcpd-p2p0.conf'
+        'mwifiex-p2p_host.service'
         '70-mwifiex-p2p.rules'
-        'mwifiex-debug.sh')
+        'mwifiex-debug.sh'
+        "http://w1.fi/releases/${_wpasup}.tar.gz"
+        "git+https://github.com/networkimprov/p2p-host.git")
 md5sums=(SKIP
          SKIP
          SKIP
          SKIP
          SKIP
-         '95251671b360fe9db435e2b7b524ab30')
+         SKIP
+         '95251671b360fe9db435e2b7b524ab30'
+         SKIP
+         SKIP)
+
+prepare() {
+  mv ${_wpasup} p2p-host/
+}
+
+build() {
+  cd p2p-host
+  make
+}
 
 package() {
   install -Dm 644 mwifiex-p2p_wpa.service -t "${pkgdir}/usr/lib/systemd/system/"
@@ -32,8 +48,12 @@ package() {
 
   install -Dm 644 udhcpd-p2p0.conf -t "${pkgdir}/etc/"
 
+  install -Dm 644 mwifiex-p2p_host.service -t "${pkgdir}/usr/lib/systemd/system/"
+
   install -Dm 644 70-mwifiex-p2p.rules -t "${pkgdir}/usr/lib/udev/rules.d/"
 
   install -Dm 755 mwifiex-debug.sh -t "${pkgdir}/usr/bin/"
+
+  install -Dm 755 p2p-host/p2phostd -t "${pkgdir}/usr/bin"
 }
 
