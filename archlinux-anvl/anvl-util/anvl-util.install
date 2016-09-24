@@ -1,7 +1,18 @@
 post_install() {
   echo -e "ttyGS0\nttyO2\nttyS2" >> etc/securetty
+
+  for tmr in logrotate man-db shadow; do
+    rm -f /usr/lib/systemd/system/multi-user.target.wants/${tmr}.timer
+  done
+  rm -f /usr/lib/systemd/system/timers.target.wants/systemd-tmpfiles-clean.timer
 }
 
 post_remove() {
   sed -i '/ttyGS0\|ttyO2\|ttyS2/d' etc/securetty
+
+  for tmr in logrotate man-db shadow; do
+    ln -si ../${tmr}.timer /usr/lib/systemd/system/multi-user.target.wants/
+  done
+  ln -si ../systemd-tmpfiles-clean.timer /usr/lib/systemd/system/timers.target.wants/
 }
+
