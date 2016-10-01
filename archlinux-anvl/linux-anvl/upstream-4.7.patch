@@ -1,0 +1,1264 @@
+From a6bb73fa4ded3e90a251d909117c2b5b35f40526 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Tue, 20 Sep 2016 02:37:27 -0700
+Subject: [PATCH 1/2] omap2plus_defconfig: build in RTC_DRV_TWL4030
+
+---
+ arch/arm/configs/omap2plus_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/configs/omap2plus_defconfig b/arch/arm/configs/omap2plus_defconfig
+index ac717cc..1a10b3d 100644
+--- a/arch/arm/configs/omap2plus_defconfig
++++ b/arch/arm/configs/omap2plus_defconfig
+@@ -412,7 +412,7 @@ CONFIG_LEDS_TRIGGER_DEFAULT_ON=m
+ CONFIG_RTC_CLASS=y
+ CONFIG_RTC_DRV_DS1307=m
+ CONFIG_RTC_DRV_TWL92330=y
+-CONFIG_RTC_DRV_TWL4030=m
++CONFIG_RTC_DRV_TWL4030=y
+ CONFIG_RTC_DRV_PALMAS=m
+ CONFIG_RTC_DRV_OMAP=m
+ CONFIG_DMADEVICES=y
+
+From 455614289813aa63fa533bbfb788e7706cc72c8e Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Wed, 7 Sep 2016 15:07:47 -0700
+Subject: [PATCH 2/2] arch: arm: defconfigs: add pstore to omap2plus_defconfig
+
+Enable CONFIG_PSTORE and CONFIG_PSTORE_RAM in omap2plus_defconfig
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/configs/omap2plus_defconfig | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm/configs/omap2plus_defconfig b/arch/arm/configs/omap2plus_defconfig
+index 1a10b3d..484b118 100644
+--- a/arch/arm/configs/omap2plus_defconfig
++++ b/arch/arm/configs/omap2plus_defconfig
+@@ -454,6 +454,9 @@ CONFIG_JFFS2_LZO=y
+ CONFIG_JFFS2_RUBIN=y
+ CONFIG_UBIFS_FS=y
+ CONFIG_CRAMFS=y
++CONFIG_PSTORE=y
++CONFIG_PSTORE_RAM=y
++CONFIG_PSTORE_CONSOLE=y
+ CONFIG_NFS_FS=y
+ CONFIG_NFS_V3_ACL=y
+ CONFIG_NFS_V4=y
+From 94d648c9f9ed076cef89673ab4fc33820e4808fe Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 11:35:41 -0700
+Subject: [PATCH 1/3] [DO NOT UPSTREAM] leds: leds-pca963x: disable
+ PCA963X_TOTEM_POLE option
+
+Limit output to PCA963X_OPEN_DRAIN since PCA963X_TOTEM_POLE will cause
+board damage.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/leds/leds-pca963x.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 407eba1..9f76e49 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -282,11 +282,14 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	pdata->leds.leds = pca963x_leds;
+ 	pdata->leds.num_leds = chip->n_leds;
+ 
++#if 0
+ 	/* default to open-drain unless totem pole (push-pull) is specified */
+ 	if (of_property_read_bool(np, "nxp,totem-pole"))
+ 		pdata->outdrv = PCA963X_TOTEM_POLE;
+ 	else
+ 		pdata->outdrv = PCA963X_OPEN_DRAIN;
++#endif
++	pdata->outdrv = PCA963X_OPEN_DRAIN;
+ 
+ 	/* default to software blinking unless hardware blinking is specified */
+ 	if (of_property_read_bool(np, "nxp,hw-blink"))
+
+From 937bceb904e2e97e58d41480ddb1b21c0e3fcb7c Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 12:16:36 -0700
+Subject: [PATCH 2/3] leds: leds-pca963x: workaround group blink scaling issue
+
+PCA9632TK part seems to incorrectly blink at ~1.3x of the programmed
+rate. This patchset add a nxp,period-scale devicetree property to
+adjust for this misconfiguration.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ Documentation/devicetree/bindings/leds/pca963x.txt |  3 +++
+ drivers/leds/leds-pca963x.c                        | 18 +++++++++++++++---
+ 2 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/leds/pca963x.txt b/Documentation/devicetree/bindings/leds/pca963x.txt
+index dafbe99..dfbdb12 100644
+--- a/Documentation/devicetree/bindings/leds/pca963x.txt
++++ b/Documentation/devicetree/bindings/leds/pca963x.txt
+@@ -7,6 +7,9 @@ Optional properties:
+ - nxp,totem-pole : use totem pole (push-pull) instead of open-drain (pca9632 defaults
+   to open-drain, newer chips to totem pole)
+ - nxp,hw-blink : use hardware blinking instead of software blinking
++- nxp,period-scale : In some configurations, the chip blinks faster than expected.
++		     This parameter provides a scaling ratio (fixed point, decimal divided
++		     by 1000) to compensate, e.g. 1300=1.3x and 750=0.75x.
+ 
+ Each led is represented as a sub-node of the nxp,pca963x device.
+ 
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 9f76e49..488bec5 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -59,6 +59,7 @@ struct pca963x_chipdef {
+ 	u8			grpfreq;
+ 	u8			ledout_base;
+ 	int			n_leds;
++	unsigned int		scaling;
+ };
+ 
+ static struct pca963x_chipdef pca963x_chipdefs[] = {
+@@ -189,6 +190,14 @@ static int pca963x_led_set(struct led_classdev *led_cdev,
+ 	return pca963x_brightness(pca963x, value);
+ }
+ 
++static unsigned int pca963x_period_scale(struct pca963x_led *pca963x,
++	unsigned int val)
++{
++	unsigned int scaling = pca963x->chip->chipdef->scaling;
++
++	return scaling ? DIV_ROUND_CLOSEST(val * scaling, 1000) : val;
++}
++
+ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		unsigned long *delay_on, unsigned long *delay_off)
+ {
+@@ -207,14 +216,14 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		time_off = 500;
+ 	}
+ 
+-	period = time_on + time_off;
++	period = pca963x_period_scale(pca963x, time_on + time_off);
+ 
+ 	/* If period not supported by hardware, default to someting sane. */
+ 	if ((period < PCA963X_BLINK_PERIOD_MIN) ||
+ 	    (period > PCA963X_BLINK_PERIOD_MAX)) {
+ 		time_on = 500;
+ 		time_off = 500;
+-		period = time_on + time_off;
++		period = pca963x_period_scale(pca963x, 1000);
+ 	}
+ 
+ 	/*
+@@ -222,7 +231,7 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 	 *	(time_on / period) = (GDC / 256) ->
+ 	 *		GDC = ((time_on * 256) / period)
+ 	 */
+-	gdc = (time_on * 256) / period;
++	gdc = (pca963x_period_scale(pca963x, time_on) * 256) / period;
+ 
+ 	/*
+ 	 * From manual: period = ((GFRQ + 1) / 24) in seconds.
+@@ -297,6 +306,9 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	else
+ 		pdata->blink_type = PCA963X_SW_BLINK;
+ 
++	if (of_property_read_u32(np, "nxp,period-scale", &chip->scaling))
++		chip->scaling = 1000;
++
+ 	return pdata;
+ }
+ 
+
+From 38feae9e6e6194ae2ad65eeaeb163a8f766d9a1d Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 19:00:39 -0700
+Subject: [PATCH 3/3] arm: devicetree: omap3-anvl: add scaling value for
+ pca9632 device
+
+Add nxp,period-scale property for scaling the period to workaround
+hardware errata
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 3b272c5..c0adb5e 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -280,6 +280,7 @@
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 		reg = <0x62>;
++		nxp,period-scale = <1300>;
+ 		nxp,hw-blink;
+ 
+ 		red@0 {
+From 8a3d476cd26dd91347ac375c577a3bdd54bdc54a Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 12:40:21 -0700
+Subject: [PATCH] net: mwifiex: p2p peer disappears after disconnect fix
+
+P2p host name disappears from the list of p2p peers on the other p2p device
+after disconnection.
+In the driver, virtual interface was not changed from p2p to station after
+disconnection. This patch ensures that the p2p host name will be
+present even after the disconnection.
+
+Signed-off-by: Karthik D A <karthida@marvell.com>
+---
+ drivers/net/wireless/marvell/mwifiex/cfg80211.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/net/wireless/marvell/mwifiex/cfg80211.c b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+index ff948a9..8e62897 100644
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+@@ -1157,6 +1157,12 @@ mwifiex_cfg80211_change_virtual_intf(struct wiphy *wiphy,
+ 			priv->adapter->curr_iface_comb.p2p_intf--;
+ 			priv->adapter->curr_iface_comb.sta_intf++;
+ 			dev->ieee80211_ptr->iftype = type;
++			if (mwifiex_deinit_priv_params(priv))
++				return -1;
++			if (mwifiex_init_new_priv_params(priv, dev, type))
++				return -1;
++			if (mwifiex_sta_init_cmd(priv, false, false))
++				return -1;
+ 			break;
+ 		case NL80211_IFTYPE_ADHOC:
+ 			if (mwifiex_cfg80211_deinit_p2p(priv))
+From 54f56c3ad7f8f1d4b6950e20b047084213862214 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Wed, 21 Sep 2016 10:57:53 -0700
+Subject: [PATCH] dts: twl4030.dtsi rtc name
+
+---
+ arch/arm/boot/dts/twl4030.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/twl4030.dtsi b/arch/arm/boot/dts/twl4030.dtsi
+index 36ae916..8b5ca8d 100644
+--- a/arch/arm/boot/dts/twl4030.dtsi
++++ b/arch/arm/boot/dts/twl4030.dtsi
+@@ -14,7 +14,7 @@
+ 	interrupt-controller;
+ 	#interrupt-cells = <1>;
+ 
+-	rtc {
++	twl_rtc: rtc {
+ 		compatible = "ti,twl4030-rtc";
+ 		interrupts = <11>;
+ 	};
+From cfb3ba8cd5f39e08f9c459dddb9984507a0ea816 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 19 Sep 2016 15:35:10 -0700
+Subject: [PATCH] phy: phy-twl4030-usb: emit VBUS status events to userspace
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/phy/phy-twl4030-usb.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/phy/phy-twl4030-usb.c b/drivers/phy/phy-twl4030-usb.c
+index d9b10a3..4830392 100644
+--- a/drivers/phy/phy-twl4030-usb.c
++++ b/drivers/phy/phy-twl4030-usb.c
+@@ -316,6 +316,9 @@ static enum musb_vbus_id_status
+ 			linkstat = MUSB_VBUS_OFF;
+ 	}
+ 
++	kobject_uevent(&twl->dev->kobj, linkstat == MUSB_VBUS_VALID
++					? KOBJ_ONLINE : KOBJ_OFFLINE);
++
+ 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
+ 			status, status, linkstat);
+ 
+From 9d875c5e6f604f55e14c3d8c6b7cf6d4b5fd6224 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Sun, 18 Sep 2016 18:07:21 -0700
+Subject: [PATCH 1/5] power: bq24190_charger: call power_supply_changed() for
+ relevant component
+
+When fault or status registers have changes, determine whether
+they're relevant to charger and/or battery before emitting uevent(s).
+---
+ drivers/power/bq24190_charger.c | 58 +++++++++++++++++++++++++----------------
+ 1 file changed, 35 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index f5746b9..fc33fb0 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -159,7 +159,6 @@ struct bq24190_dev_info {
+ 	unsigned int			gpio_int;
+ 	unsigned int			irq;
+ 	struct mutex			f_reg_lock;
+-	bool				first_time;
+ 	bool				charger_health_valid;
+ 	bool				battery_health_valid;
+ 	bool				battery_status_valid;
+@@ -1196,8 +1195,11 @@ static const struct power_supply_desc bq24190_battery_desc = {
+ 
+ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ {
++	const u8 battery_mask_ss = BQ24190_REG_SS_CHRG_STAT_MASK;
++	const u8 battery_mask_f = BQ24190_REG_F_BAT_FAULT_MASK
++			| BQ24190_REG_F_NTC_FAULT_MASK;
+ 	struct bq24190_dev_info *bdi = data;
+-	bool alert_userspace = false;
++	bool alert_charger = false, alert_battery = false;
+ 	u8 ss_reg = 0, f_reg = 0;
+ 	int ret;
+ 
+@@ -1225,8 +1227,15 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 					ret);
+ 		}
+ 
++		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss)) {
++			/* copy battery-related bits to saved ss_reg */
++			bdi->ss_reg &= ~battery_mask_ss;
++			bdi->ss_reg |= battery_mask_ss & ss_reg;
++			alert_battery = true;
++		}
++		if (bdi->ss_reg != ss_reg)
++			alert_charger = true;
+ 		bdi->ss_reg = ss_reg;
+-		alert_userspace = true;
+ 	}
+ 
+ 	mutex_lock(&bdi->f_reg_lock);
+@@ -1239,33 +1248,26 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 	}
+ 
+ 	if (f_reg != bdi->f_reg) {
++		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f)) {
++			/* copy battery-related bits to saved f_reg */
++			bdi->f_reg &= ~battery_mask_f;
++			bdi->f_reg |= battery_mask_f & f_reg;
++			alert_battery = true;
++		}
++		if (bdi->f_reg != f_reg)
++			alert_charger = true;
+ 		bdi->f_reg = f_reg;
+ 		bdi->charger_health_valid = true;
+ 		bdi->battery_health_valid = true;
+ 		bdi->battery_status_valid = true;
+-
+-		alert_userspace = true;
+ 	}
+ 
+ 	mutex_unlock(&bdi->f_reg_lock);
+ 
+-	/*
+-	 * Sometimes bq24190 gives a steady trickle of interrupts even
+-	 * though the watchdog timer is turned off and neither the STATUS
+-	 * nor FAULT registers have changed.  Weed out these sprurious
+-	 * interrupts so userspace isn't alerted for no reason.
+-	 * In addition, the chip always generates an interrupt after
+-	 * register reset so we should ignore that one (the very first
+-	 * interrupt received).
+-	 */
+-	if (alert_userspace) {
+-		if (!bdi->first_time) {
+-			power_supply_changed(bdi->charger);
+-			power_supply_changed(bdi->battery);
+-		} else {
+-			bdi->first_time = false;
+-		}
+-	}
++	if (alert_charger)
++		power_supply_changed(bdi->charger);
++	if (alert_battery)
++		power_supply_changed(bdi->battery);
+ 
+ out:
+ 	pm_runtime_put_sync(bdi->dev);
+@@ -1300,6 +1302,10 @@ static int bq24190_hw_init(struct bq24190_dev_info *bdi)
+ 		goto out;
+ 
+ 	ret = bq24190_set_mode_host(bdi);
++	if (ret < 0)
++		goto out;
++
++	ret = bq24190_read(bdi, BQ24190_REG_SS, &bdi->ss_reg);
+ out:
+ 	pm_runtime_put_sync(bdi->dev);
+ 	return ret;
+@@ -1375,7 +1381,8 @@ static int bq24190_probe(struct i2c_client *client,
+ 	bdi->model = id->driver_data;
+ 	strncpy(bdi->model_name, id->name, I2C_NAME_SIZE);
+ 	mutex_init(&bdi->f_reg_lock);
+-	bdi->first_time = true;
++	bdi->f_reg = 0;
++	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK;
+ 	bdi->charger_health_valid = false;
+ 	bdi->battery_health_valid = false;
+ 	bdi->battery_status_valid = false;
+@@ -1488,12 +1495,17 @@ static int bq24190_pm_resume(struct device *dev)
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct bq24190_dev_info *bdi = i2c_get_clientdata(client);
+ 
++	/* we expect no contention with other threads here */
++	bdi->f_reg = 0;
++	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK;
+ 	bdi->charger_health_valid = false;
+ 	bdi->battery_health_valid = false;
+ 	bdi->battery_status_valid = false;
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 	bq24190_register_reset(bdi);
++ 	bq24190_set_mode_host(bdi);
++	bq24190_read(bdi, BQ24190_REG_SS, &bdi->ss_reg);
+ 	pm_runtime_put_sync(bdi->dev);
+ 
+ 	/* Things may have changed while suspended so alert upper layer */
+
+From 5fb46561d4d875f338c2473077e325327589376d Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 00:09:14 -0700
+Subject: [PATCH 2/5] power: bq24190_charger: don't read fault register outside
+ irq_handle_thread()
+
+Caching the fault register after a single read may not keep an accurate
+value, so do two read()s in irq_handle_thread() and none elsewhere. Also
+change cache locking to rw-spinlock from mutex. If a safety timer fault
+clears itself later, we apparently don't get an interrupt (INT), however
+other interrupts would refresh the register cache.
+
+From the manual: "When a fault occurs, the charger device sends out INT
+ and keeps the fault state in REG09 until the host reads the fault register.
+ Before the host reads REG09 and all the faults are cleared, the charger
+ device would not send any INT upon new faults. In order to read the
+ current fault status, the host has to read REG09 two times consecutively.
+ The 1st reads fault register status from the last read [1] and the 2nd reads
+ the current fault register status."
+
+[1] presumably a typo; should be "last fault"
+---
+ drivers/power/bq24190_charger.c | 130 +++++++++++++++-------------------------
+ 1 file changed, 47 insertions(+), 83 deletions(-)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index fc33fb0..b51eac1 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -17,6 +17,7 @@
+ #include <linux/power_supply.h>
+ #include <linux/gpio.h>
+ #include <linux/i2c.h>
++#include <linux/spinlock.h>
+ 
+ #include <linux/power/bq24190_charger.h>
+ 
+@@ -144,10 +145,7 @@
+  * so the first read after a fault returns the latched value and subsequent
+  * reads return the current value.  In order to return the fault status
+  * to the user, have the interrupt handler save the reg's value and retrieve
+- * it in the appropriate health/status routine.  Each routine has its own
+- * flag indicating whether it should use the value stored by the last run
+- * of the interrupt handler or do an actual reg read.  That way each routine
+- * can report back whatever fault may have occured.
++ * it in the appropriate health/status routine.
+  */
+ struct bq24190_dev_info {
+ 	struct i2c_client		*client;
+@@ -158,10 +156,7 @@ struct bq24190_dev_info {
+ 	kernel_ulong_t			model;
+ 	unsigned int			gpio_int;
+ 	unsigned int			irq;
+-	struct mutex			f_reg_lock;
+-	bool				charger_health_valid;
+-	bool				battery_health_valid;
+-	bool				battery_status_valid;
++	rwlock_t			f_reg_lock;
+ 	u8				f_reg;
+ 	u8				ss_reg;
+ 	u8				watchdog;
+@@ -635,21 +630,12 @@ static int bq24190_charger_get_health(struct bq24190_dev_info *bdi,
+ 		union power_supply_propval *val)
+ {
+ 	u8 v;
+-	int health, ret;
++	unsigned long flags;
++	int health;
+ 
+-	mutex_lock(&bdi->f_reg_lock);
+-
+-	if (bdi->charger_health_valid) {
+-		v = bdi->f_reg;
+-		bdi->charger_health_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &v);
+-		if (ret < 0)
+-			return ret;
+-	}
++	read_lock_irqsave(&bdi->f_reg_lock, flags);
++	v = bdi->f_reg;
++	read_unlock_irqrestore(&bdi->f_reg_lock, flags);
+ 
+ 	if (v & BQ24190_REG_F_BOOST_FAULT_MASK) {
+ 		/*
+@@ -933,21 +919,12 @@ static int bq24190_battery_get_status(struct bq24190_dev_info *bdi,
+ 		union power_supply_propval *val)
+ {
+ 	u8 ss_reg, chrg_fault;
++	unsigned long flags;
+ 	int status, ret;
+ 
+-	mutex_lock(&bdi->f_reg_lock);
+-
+-	if (bdi->battery_status_valid) {
+-		chrg_fault = bdi->f_reg;
+-		bdi->battery_status_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &chrg_fault);
+-		if (ret < 0)
+-			return ret;
+-	}
++	read_lock_irqsave(&bdi->f_reg_lock, flags);
++	chrg_fault = bdi->f_reg;
++	read_unlock_irqrestore(&bdi->f_reg_lock, flags);
+ 
+ 	chrg_fault &= BQ24190_REG_F_CHRG_FAULT_MASK;
+ 	chrg_fault >>= BQ24190_REG_F_CHRG_FAULT_SHIFT;
+@@ -995,21 +972,12 @@ static int bq24190_battery_get_health(struct bq24190_dev_info *bdi,
+ 		union power_supply_propval *val)
+ {
+ 	u8 v;
+-	int health, ret;
+-
+-	mutex_lock(&bdi->f_reg_lock);
++	unsigned long flags;
++	int health;
+ 
+-	if (bdi->battery_health_valid) {
+-		v = bdi->f_reg;
+-		bdi->battery_health_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &v);
+-		if (ret < 0)
+-			return ret;
+-	}
++	read_lock_irqsave(&bdi->f_reg_lock, flags);
++	v = bdi->f_reg;
++	read_unlock_irqrestore(&bdi->f_reg_lock, flags);
+ 
+ 	if (v & BQ24190_REG_F_BAT_FAULT_MASK) {
+ 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+@@ -1201,7 +1169,7 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 	struct bq24190_dev_info *bdi = data;
+ 	bool alert_charger = false, alert_battery = false;
+ 	u8 ss_reg = 0, f_reg = 0;
+-	int ret;
++	int i, ret;
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 
+@@ -1210,6 +1178,34 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 		dev_err(bdi->dev, "Can't read SS reg: %d\n", ret);
+ 		goto out;
+ 	}
++ 
++	i = 0;
++	do {
++		ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
++		if (ret < 0) {
++			dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
++			goto out;
++		}
++	} while (f_reg && ++i < 2);
++
++	if (f_reg != bdi->f_reg) {
++ 		dev_info(bdi->dev, "Fault: boost %lu, charge %lu, battery %lu, ntc %lu\n",
++			(f_reg & BQ24190_REG_F_BOOST_FAULT_MASK) >> BQ24190_REG_F_BOOST_FAULT_SHIFT,
++			(f_reg & BQ24190_REG_F_CHRG_FAULT_MASK ) >> BQ24190_REG_F_CHRG_FAULT_SHIFT ,
++			(f_reg & BQ24190_REG_F_BAT_FAULT_MASK  ) >> BQ24190_REG_F_BAT_FAULT_SHIFT  ,
++			(f_reg & BQ24190_REG_F_NTC_FAULT_MASK  ) >> BQ24190_REG_F_NTC_FAULT_SHIFT  );
++		write_lock(&bdi->f_reg_lock);
++		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f)) {
++			/* copy battery-related bits to saved f_reg */
++			bdi->f_reg &= ~battery_mask_f;
++			bdi->f_reg |= battery_mask_f & f_reg;
++			alert_battery = true;
++		}
++		if (bdi->f_reg != f_reg)
++			alert_charger = true;
++		bdi->f_reg = f_reg;
++		write_unlock(&bdi->f_reg_lock);
++	}
+ 
+ 	if (ss_reg != bdi->ss_reg) {
+ 		/*
+@@ -1238,32 +1234,6 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 		bdi->ss_reg = ss_reg;
+ 	}
+ 
+-	mutex_lock(&bdi->f_reg_lock);
+-
+-	ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
+-	if (ret < 0) {
+-		mutex_unlock(&bdi->f_reg_lock);
+-		dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
+-		goto out;
+-	}
+-
+-	if (f_reg != bdi->f_reg) {
+-		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f)) {
+-			/* copy battery-related bits to saved f_reg */
+-			bdi->f_reg &= ~battery_mask_f;
+-			bdi->f_reg |= battery_mask_f & f_reg;
+-			alert_battery = true;
+-		}
+-		if (bdi->f_reg != f_reg)
+-			alert_charger = true;
+-		bdi->f_reg = f_reg;
+-		bdi->charger_health_valid = true;
+-		bdi->battery_health_valid = true;
+-		bdi->battery_status_valid = true;
+-	}
+-
+-	mutex_unlock(&bdi->f_reg_lock);
+-
+ 	if (alert_charger)
+ 		power_supply_changed(bdi->charger);
+ 	if (alert_battery)
+@@ -1380,12 +1350,9 @@ static int bq24190_probe(struct i2c_client *client,
+ 	bdi->dev = dev;
+ 	bdi->model = id->driver_data;
+ 	strncpy(bdi->model_name, id->name, I2C_NAME_SIZE);
+-	mutex_init(&bdi->f_reg_lock);
++	rwlock_init(&bdi->f_reg_lock);
+ 	bdi->f_reg = 0;
+ 	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK;
+-	bdi->charger_health_valid = false;
+-	bdi->battery_health_valid = false;
+-	bdi->battery_status_valid = false;
+ 
+ 	i2c_set_clientdata(client, bdi);
+ 
+@@ -1498,9 +1465,6 @@ static int bq24190_pm_resume(struct device *dev)
+ 	/* we expect no contention with other threads here */
+ 	bdi->f_reg = 0;
+ 	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK;
+-	bdi->charger_health_valid = false;
+-	bdi->battery_health_valid = false;
+-	bdi->battery_status_valid = false;
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 	bq24190_register_reset(bdi);
+
+From 81aef9f3f153d68fbbf5e307d90f9e825128cb0d Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 00:43:17 -0700
+Subject: [PATCH 3/5] power: bq24190_charger: enable gpio to assert charger otg
+ pin
+
+If "gpio-otg" named in dts config, set gpio high when IINLIM==2 to
+enable 500mA current draw. Also turn off HIZ mode, which the charger
+turns on when battery is near-full.
+---
+ drivers/power/bq24190_charger.c | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index b51eac1..5ada34b 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -11,6 +11,7 @@
+ #include <linux/module.h>
+ #include <linux/interrupt.h>
+ #include <linux/delay.h>
++#include <linux/of_gpio.h>
+ #include <linux/of_irq.h>
+ #include <linux/of_device.h>
+ #include <linux/pm_runtime.h>
+@@ -32,6 +33,7 @@
+ #define BQ24190_REG_ISC_VINDPM_SHIFT		3
+ #define BQ24190_REG_ISC_IINLIM_MASK		(BIT(2) | BIT(1) | BIT(0))
+ #define BQ24190_REG_ISC_IINLIM_SHIFT		0
++#define BQ24190_REG_ISC_IINLIM_500MA		BIT(1)
+ 
+ #define BQ24190_REG_POC		0x01 /* Power-On Configuration */
+ #define BQ24190_REG_POC_RESET_MASK		BIT(7)
+@@ -155,6 +157,7 @@ struct bq24190_dev_info {
+ 	char				model_name[I2C_NAME_SIZE];
+ 	kernel_ulong_t			model;
+ 	unsigned int			gpio_int;
++	struct gpio_desc		*gpio_otg;
+ 	unsigned int			irq;
+ 	rwlock_t			f_reg_lock;
+ 	u8				f_reg;
+@@ -536,6 +539,32 @@ static int bq24190_register_reset(struct bq24190_dev_info *bdi)
+ 	return 0;
+ }
+ 
++static int bq24190_update_otg(struct bq24190_dev_info *bdi, bool pg_state)
++{
++	if (IS_ERR(bdi->gpio_otg))
++		return 0;
++
++	if (pg_state) {
++		u8 inlim;
++		int ret = bq24190_write_mask(bdi, BQ24190_REG_ISC,
++				BQ24190_REG_ISC_EN_HIZ_MASK,
++				BQ24190_REG_ISC_EN_HIZ_SHIFT, 0);
++		if (ret < 0)
++			return ret;
++
++		ret = bq24190_read_mask(bdi, BQ24190_REG_ISC,
++				 BQ24190_REG_ISC_IINLIM_MASK,
++				 BQ24190_REG_ISC_IINLIM_SHIFT, &inlim);
++		if (ret < 0)
++			return ret;
++
++		pg_state = inlim == BQ24190_REG_ISC_IINLIM_500MA;
++	}
++	gpiod_set_value_cansleep(bdi->gpio_otg, pg_state);
++
++	return 0;
++}
++
+ /* Charger power supply property routines */
+ 
+ static int bq24190_charger_get_charge_type(struct bq24190_dev_info *bdi,
+@@ -1223,6 +1252,14 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 					ret);
+ 		}
+ 
++		if ((bdi->ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK) !=
++				(ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK)) {
++			ret = bq24190_update_otg(bdi,
++				!!(ss_reg & BQ24190_REG_SS_PG_STAT_MASK));
++			if (ret < 0)
++				dev_err(bdi->dev, "Can't update OTG state\n");
++		}
++
+ 		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss)) {
+ 			/* copy battery-related bits to saved ss_reg */
+ 			bdi->ss_reg &= ~battery_mask_ss;
+@@ -1288,6 +1325,9 @@ static int bq24190_setup_dt(struct bq24190_dev_info *bdi)
+ 	if (bdi->irq <= 0)
+ 		return -1;
+ 
++	bdi->gpio_otg = devm_gpiod_get_optional(&bdi->client->dev,
++						"gpio-otg", GPIOD_OUT_LOW);
++
+ 	return 0;
+ }
+ #else
+
+From 18ca99a4c4cda4dd4d543b575f236dd5cee2bf32 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Sat, 24 Sep 2016 13:01:27 -0700
+Subject: [PATCH 4/5] power: bq24190_charger: install irq_handler_thread() at
+ end of probe()
+
+---
+ drivers/power/bq24190_charger.c | 31 ++++++++++++++++---------------
+ 1 file changed, 16 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index 5ada34b..f1b7856 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -1406,22 +1406,13 @@ static int bq24190_probe(struct i2c_client *client,
+ 		return -EINVAL;
+ 	}
+ 
+-	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
+-			bq24190_irq_handler_thread,
+-			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+-			"bq24190-charger", bdi);
+-	if (ret < 0) {
+-		dev_err(dev, "Can't set up irq handler\n");
+-		goto out1;
+-	}
+-
+ 	pm_runtime_enable(dev);
+ 	pm_runtime_resume(dev);
+ 
+ 	ret = bq24190_hw_init(bdi);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Hardware init failed\n");
+-		goto out2;
++		goto out1;
+ 	}
+ 
+ 	charger_cfg.drv_data = bdi;
+@@ -1432,7 +1423,7 @@ static int bq24190_probe(struct i2c_client *client,
+ 	if (IS_ERR(bdi->charger)) {
+ 		dev_err(dev, "Can't register charger\n");
+ 		ret = PTR_ERR(bdi->charger);
+-		goto out2;
++		goto out1;
+ 	}
+ 
+ 	battery_cfg.drv_data = bdi;
+@@ -1441,24 +1432,34 @@ static int bq24190_probe(struct i2c_client *client,
+ 	if (IS_ERR(bdi->battery)) {
+ 		dev_err(dev, "Can't register battery\n");
+ 		ret = PTR_ERR(bdi->battery);
+-		goto out3;
++		goto out2;
+ 	}
+ 
+ 	ret = bq24190_sysfs_create_group(bdi);
+ 	if (ret) {
+ 		dev_err(dev, "Can't create sysfs entries\n");
++		goto out3;
++	}
++
++	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
++			bq24190_irq_handler_thread,
++			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
++			"bq24190-charger", bdi);
++	if (ret < 0) {
++		dev_err(dev, "Can't set up irq handler\n");
+ 		goto out4;
+ 	}
+ 
+ 	return 0;
+ 
+ out4:
+-	power_supply_unregister(bdi->battery);
++	bq24190_sysfs_remove_group(bdi);
+ out3:
+-	power_supply_unregister(bdi->charger);
++	power_supply_unregister(bdi->battery);
+ out2:
+-	pm_runtime_disable(dev);
++	power_supply_unregister(bdi->charger);
+ out1:
++	pm_runtime_disable(dev);
+ 	if (bdi->gpio_int)
+ 		gpio_free(bdi->gpio_int);
+ 
+
+From fc8a1c726e6db43cc3630b4748bf57b16a60c838 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Sat, 24 Sep 2016 18:08:47 -0700
+Subject: [PATCH 5/5] power: bq24190_charger: install irq_handler_thread() with
+ IRQF_TRIGGER_FALLING
+
+---
+ drivers/power/bq24190_charger.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
+index f1b7856..b7a22cc 100644
+--- a/drivers/power/bq24190_charger.c
++++ b/drivers/power/bq24190_charger.c
+@@ -1443,7 +1443,7 @@ static int bq24190_probe(struct i2c_client *client,
+ 
+ 	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
+ 			bq24190_irq_handler_thread,
+-			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
++			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+ 			"bq24190-charger", bdi);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Can't set up irq handler\n");
+From 298b7a5a4e55cf5181395fd65937267d38c51895 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 09:58:06 -0700
+Subject: [PATCH]  power: bq27xxx_battery: allow kernel poll_interval parameter
+ runtime update
+
+Fix issue with poll_interval being not updated till the previous
+interval expired.
+
+Cc: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/bq27xxx_battery.c       | 38 ++++++++++++++++++++++++++++++++++-
+ include/linux/power/bq27xxx_battery.h |  1 +
+ 2 files changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/bq27xxx_battery.c b/drivers/power/bq27xxx_battery.c
+index 45f6ebf..9cdca31e 100644
+--- a/drivers/power/bq27xxx_battery.c
++++ b/drivers/power/bq27xxx_battery.c
+@@ -39,6 +39,7 @@
+ 
+ #include <linux/device.h>
+ #include <linux/module.h>
++#include <linux/mutex.h>
+ #include <linux/param.h>
+ #include <linux/jiffies.h>
+ #include <linux/workqueue.h>
+@@ -402,8 +403,35 @@ static struct {
+ 	BQ27XXX_PROP(BQ27421, bq27421_battery_props),
+ };
+ 
++static DEFINE_MUTEX(bq27xxx_list_lock);
++static LIST_HEAD(bq27xxx_battery_devices);
++
++static int poll_interval_param_set(const char *val, const struct kernel_param *kp)
++{
++	struct bq27xxx_device_info *di;
++	int ret;
++
++	ret = param_set_uint(val, kp);
++	if (ret < 0)
++		return ret;
++
++	mutex_lock(&bq27xxx_list_lock);
++	list_for_each_entry(di, &bq27xxx_battery_devices, list) {
++		cancel_delayed_work_sync(&di->work);
++		schedule_delayed_work(&di->work, 0);
++	}
++	mutex_unlock(&bq27xxx_list_lock);
++
++	return ret;
++}
++
++static const struct kernel_param_ops param_ops_poll_interval = {
++	.get = param_get_uint,
++	.set = poll_interval_param_set,
++};
++
+ static unsigned int poll_interval = 360;
+-module_param(poll_interval, uint, 0644);
++module_param_cb(poll_interval, &param_ops_poll_interval, &poll_interval, 0644);
+ MODULE_PARM_DESC(poll_interval,
+ 		 "battery poll interval in seconds - 0 disables polling");
+ 
+@@ -986,6 +1014,10 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
+ 
+ 	bq27xxx_battery_update(di);
+ 
++	mutex_lock(&bq27xxx_list_lock);
++	list_add(&di->list, &bq27xxx_battery_devices);
++	mutex_unlock(&bq27xxx_list_lock);
++
+ 	return 0;
+ }
+ EXPORT_SYMBOL_GPL(bq27xxx_battery_setup);
+@@ -1004,6 +1036,10 @@ void bq27xxx_battery_teardown(struct bq27xxx_device_info *di)
+ 
+ 	power_supply_unregister(di->bat);
+ 
++	mutex_lock(&bq27xxx_list_lock);
++	list_del(&di->list);
++	mutex_unlock(&bq27xxx_list_lock);
++
+ 	mutex_destroy(&di->lock);
+ }
+ EXPORT_SYMBOL_GPL(bq27xxx_battery_teardown);
+diff --git a/include/linux/power/bq27xxx_battery.h b/include/linux/power/bq27xxx_battery.h
+index b50c049..e30deb0 100644
+--- a/include/linux/power/bq27xxx_battery.h
++++ b/include/linux/power/bq27xxx_battery.h
+@@ -58,6 +58,7 @@ struct bq27xxx_device_info {
+ 	unsigned long last_update;
+ 	struct delayed_work work;
+ 	struct power_supply *bat;
++	struct list_head list;
+ 	struct mutex lock;
+ 	u8 *regs;
+ };
+From 9d497c897f52811e9bdec60b8e1a4c2ea0ca8345 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Tue, 20 Sep 2016 14:04:05 -0700
+Subject: [PATCH 1/3] power: power_supply: add new property
+ POWER_SUPPLY_PROP_POLL_INTERVAL
+
+Add new POWER_SUPPLY_PROP_POLL_INTERVAL property to display/set the
+update interval in seconds of the device.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ Documentation/power/power_supply_class.txt | 1 +
+ drivers/power/power_supply_sysfs.c         | 1 +
+ include/linux/power_supply.h               | 1 +
+ 3 files changed, 3 insertions(+)
+
+diff --git a/Documentation/power/power_supply_class.txt b/Documentation/power/power_supply_class.txt
+index 82dacc0..0075277 100644
+--- a/Documentation/power/power_supply_class.txt
++++ b/Documentation/power/power_supply_class.txt
+@@ -158,6 +158,7 @@ while battery powers a load)
+ TIME_TO_FULL - seconds left for battery to be considered full (i.e.
+ while battery is charging)
+ 
++POLL_INTERVAL - seconds between queries to retrieve stats from hardware
+ 
+ Battery <-> external power supply interaction
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+diff --git a/drivers/power/power_supply_sysfs.c b/drivers/power/power_supply_sysfs.c
+index 80fed98..df66fad 100644
+--- a/drivers/power/power_supply_sysfs.c
++++ b/drivers/power/power_supply_sysfs.c
+@@ -198,6 +198,7 @@ static struct device_attribute power_supply_attrs[] = {
+ 	POWER_SUPPLY_ATTR(scope),
+ 	POWER_SUPPLY_ATTR(charge_term_current),
+ 	POWER_SUPPLY_ATTR(calibrate),
++	POWER_SUPPLY_ATTR(poll_interval),
+ 	/* Properties of type `const char *' */
+ 	POWER_SUPPLY_ATTR(model_name),
+ 	POWER_SUPPLY_ATTR(manufacturer),
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index 7510617..5d45ac5 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -148,6 +148,7 @@ enum power_supply_property {
+ 	POWER_SUPPLY_PROP_SCOPE,
+ 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
+ 	POWER_SUPPLY_PROP_CALIBRATE,
++	POWER_SUPPLY_PROP_POLL_INTERVAL, /* in seconds! */
+ 	/* Properties of type `const char *' */
+ 	POWER_SUPPLY_PROP_MODEL_NAME,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
+
+From 446a699811969c7e5515b950520ecd6829b108ad Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Tue, 20 Sep 2016 14:04:12 -0700
+Subject: [PATCH 2/3] power: bq27xxx_battery: add poll interval property query
+
+Add POWER_SUPPLY_PROP_POLL_INTERVAL property to query and set the
+polling interval of the fuel gauge.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/bq27xxx_battery.c | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/drivers/power/bq27xxx_battery.c b/drivers/power/bq27xxx_battery.c
+index 9cdca31e..c33f9e4 100644
+--- a/drivers/power/bq27xxx_battery.c
++++ b/drivers/power/bq27xxx_battery.c
+@@ -274,6 +274,7 @@ static enum power_supply_property bq27000_battery_props[] = {
+ 	POWER_SUPPLY_PROP_POWER_AVG,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27010_battery_props[] = {
+@@ -294,6 +295,7 @@ static enum power_supply_property bq27010_battery_props[] = {
+ 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27500_battery_props[] = {
+@@ -312,6 +314,7 @@ static enum power_supply_property bq27500_battery_props[] = {
+ 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27530_battery_props[] = {
+@@ -330,6 +333,7 @@ static enum power_supply_property bq27530_battery_props[] = {
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27541_battery_props[] = {
+@@ -349,6 +353,7 @@ static enum power_supply_property bq27541_battery_props[] = {
+ 	POWER_SUPPLY_PROP_POWER_AVG,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27545_battery_props[] = {
+@@ -367,6 +372,7 @@ static enum power_supply_property bq27545_battery_props[] = {
+ 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+ 	POWER_SUPPLY_PROP_POWER_AVG,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ static enum power_supply_property bq27421_battery_props[] = {
+@@ -382,6 +388,7 @@ static enum power_supply_property bq27421_battery_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_NOW,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+ 	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_POLL_INTERVAL,
+ };
+ 
+ #define BQ27XXX_PROP(_id, _prop)		\
+@@ -969,6 +976,9 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_MANUFACTURER:
+ 		val->strval = BQ27XXX_MANUFACTURER;
+ 		break;
++	case POWER_SUPPLY_PROP_POLL_INTERVAL:
++		val->intval = poll_interval;
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+@@ -976,6 +986,34 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
+ 	return ret;
+ }
+ 
++static int bq27xxx_battery_set_property(struct power_supply *psy,
++					enum power_supply_property psp,
++					const union power_supply_propval *val)
++{
++	struct bq27xxx_device_info *di = power_supply_get_drvdata(psy);
++
++	if (psp != POWER_SUPPLY_PROP_POLL_INTERVAL)
++		return -EINVAL;
++
++	if (poll_interval == val->intval)
++		return 0;
++
++	poll_interval = val->intval;
++	cancel_delayed_work_sync(&di->work);
++	schedule_delayed_work(&di->work, 0);
++
++	return 0;
++}
++
++static int bq27xxx_property_is_writeable(struct power_supply *psy,
++					 enum power_supply_property psp)
++{
++	if (psp == POWER_SUPPLY_PROP_POLL_INTERVAL)
++		return 1;
++
++	return 0;
++}
++
+ static void bq27xxx_external_power_changed(struct power_supply *psy)
+ {
+ 	struct bq27xxx_device_info *di = power_supply_get_drvdata(psy);
+@@ -1002,6 +1040,8 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
+ 	psy_desc->properties = bq27xxx_battery_props[di->chip].props;
+ 	psy_desc->num_properties = bq27xxx_battery_props[di->chip].size;
+ 	psy_desc->get_property = bq27xxx_battery_get_property;
++	psy_desc->set_property = bq27xxx_battery_set_property;
++	psy_desc->property_is_writeable = bq27xxx_property_is_writeable;
+ 	psy_desc->external_power_changed = bq27xxx_external_power_changed;
+ 
+ 	di->bat = power_supply_register_no_ws(di->dev, psy_desc, &psy_cfg);
+
+From 37464b5a3c05a83b0bea5b6b1795a237fd9ae800 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Wed, 28 Sep 2016 19:26:51 -0700
+Subject: [PATCH 3/3] power: bq27xxx_battery: don't update poll_interval param
+ if same
+
+To avoid canceling the delayed workqueue needlessly, and scheduling an
+immediate polling. Check if the new poll_interval value is different
+than the previous setting.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/bq27xxx_battery.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/bq27xxx_battery.c b/drivers/power/bq27xxx_battery.c
+index c33f9e4..89082e6 100644
+--- a/drivers/power/bq27xxx_battery.c
++++ b/drivers/power/bq27xxx_battery.c
+@@ -416,10 +416,11 @@ static LIST_HEAD(bq27xxx_battery_devices);
+ static int poll_interval_param_set(const char *val, const struct kernel_param *kp)
+ {
+ 	struct bq27xxx_device_info *di;
++	unsigned int prev_val = *(unsigned int *) kp->arg;
+ 	int ret;
+ 
+ 	ret = param_set_uint(val, kp);
+-	if (ret < 0)
++	if (ret < 0 || prev_val == *(unsigned int *) kp->arg)
+ 		return ret;
+ 
+ 	mutex_lock(&bq27xxx_list_lock);
+From 100e6c6c6b5e3357a4e251a241becca1d237b801 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 23 Sep 2016 17:41:35 -0700
+Subject: [PATCH 1/2] arm: dts: omap3-anvl: add spi1_pins
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 3b272c5..4c5c239 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -148,6 +148,16 @@
+ 			OMAP3_CORE1_IOPAD(0x21a0, PIN_OUTPUT | MUX_MODE0)		/* uart3_tx_irtx.uart3_tx_irtx */
+ 		>;
+ 	};
++
++	mcspi1_pins: pinmux_mcspi1_pins {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x21c8, PIN_INPUT | MUX_MODE0)		/* mcspi1_clk.mcspi1_clk */
++			OMAP3_CORE1_IOPAD(0x21ca, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_mosi.mcspi1_mosi */
++			OMAP3_CORE1_IOPAD(0x21cc, PIN_INPUT | MUX_MODE0)		/* mcspi1_miso.mcspi1_miso */
++			OMAP3_CORE1_IOPAD(0x21ce, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_cs0.mcspi1_cs0 */
++			OMAP3_CORE1_IOPAD(0x21d0, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_cs1.mcspi1_cs1 */
++		>;
++	};
+ };
+ 
+ &omap3_pmx_core2 {
+@@ -363,6 +373,11 @@
+ 	pinctrl-names = "default";
+ };
+ 
++&mcspi1 {
++	pinctrl-0 = <&mcspi1_pins>;
++	pinctrl-names = "default";
++};
++
+ &usbhshost {
+ 	status = "disabled";
+ };
+
+From c64737c9668db3716f56e4160917dcc697cbef73 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 23 Sep 2016 17:45:47 -0700
+Subject: [PATCH 2/2] [DO NOT UPSTREAM] spi: add spidev to spi1
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 4c5c239..b301e8d 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -376,6 +376,19 @@
+ &mcspi1 {
+ 	pinctrl-0 = <&mcspi1_pins>;
+ 	pinctrl-names = "default";
++	status = "okay";
++
++	spidev0: spidev@0 {
++		spi-max-frequency = <24000000>;
++		reg = <0>;
++		compatible = "spidev";
++	};
++
++	spidev1: spidev@1 {
++		spi-max-frequency = <24000000>;
++		reg = <1>;
++		compatible = "spidev";
++	};
+ };
+ 
+ &usbhshost {
