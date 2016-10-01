@@ -7,5 +7,5 @@ Type=simple
 ExecStart=/usr/bin/wpa_supplicant -i p2p0 -D nl80211 -c /etc/wpa_supplicant/wpa_supplicant-p2p0.conf
 
 [Install]
-# invoked by mwifiex-p2p_host.service
+# invoked by mwifiex-p2p.service
 

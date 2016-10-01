@@ -12,5 +12,5 @@ ExecStopPost=/usr/bin/ip link set p2p0 down
 ExecStopPost=/usr/bin/ip addr flush dev p2p0
 
 [Install]
-# invoked by mwifiex-p2p_host.service
+# invoked by mwifiex-p2p.service
 
