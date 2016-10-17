@@ -47,242 +47,10 @@ index 1a10b3d..484b118 100644
  CONFIG_NFS_FS=y
  CONFIG_NFS_V3_ACL=y
  CONFIG_NFS_V4=y
-From 94d648c9f9ed076cef89673ab4fc33820e4808fe Mon Sep 17 00:00:00 2001
-From: Matt Ranostay <matt@ranostay.consulting>
-Date: Mon, 26 Sep 2016 11:35:41 -0700
-Subject: [PATCH 1/3] [DO NOT UPSTREAM] leds: leds-pca963x: disable
- PCA963X_TOTEM_POLE option
-
-Limit output to PCA963X_OPEN_DRAIN since PCA963X_TOTEM_POLE will cause
-board damage.
-
-Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
----
- drivers/leds/leds-pca963x.c | 3 +++
- 1 file changed, 3 insertions(+)
-
-diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
-index 407eba1..9f76e49 100644
---- a/drivers/leds/leds-pca963x.c
-+++ b/drivers/leds/leds-pca963x.c
-@@ -282,11 +282,14 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
- 	pdata->leds.leds = pca963x_leds;
- 	pdata->leds.num_leds = chip->n_leds;
- 
-+#if 0
- 	/* default to open-drain unless totem pole (push-pull) is specified */
- 	if (of_property_read_bool(np, "nxp,totem-pole"))
- 		pdata->outdrv = PCA963X_TOTEM_POLE;
- 	else
- 		pdata->outdrv = PCA963X_OPEN_DRAIN;
-+#endif
-+	pdata->outdrv = PCA963X_OPEN_DRAIN;
- 
- 	/* default to software blinking unless hardware blinking is specified */
- 	if (of_property_read_bool(np, "nxp,hw-blink"))
-
-From 937bceb904e2e97e58d41480ddb1b21c0e3fcb7c Mon Sep 17 00:00:00 2001
-From: Matt Ranostay <matt@ranostay.consulting>
-Date: Mon, 26 Sep 2016 12:16:36 -0700
-Subject: [PATCH 2/3] leds: leds-pca963x: workaround group blink scaling issue
-
-PCA9632TK part seems to incorrectly blink at ~1.3x of the programmed
-rate. This patchset add a nxp,period-scale devicetree property to
-adjust for this misconfiguration.
-
-Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
----
- Documentation/devicetree/bindings/leds/pca963x.txt |  3 +++
- drivers/leds/leds-pca963x.c                        | 18 +++++++++++++++---
- 2 files changed, 18 insertions(+), 3 deletions(-)
-
-diff --git a/Documentation/devicetree/bindings/leds/pca963x.txt b/Documentation/devicetree/bindings/leds/pca963x.txt
-index dafbe99..dfbdb12 100644
---- a/Documentation/devicetree/bindings/leds/pca963x.txt
-+++ b/Documentation/devicetree/bindings/leds/pca963x.txt
-@@ -7,6 +7,9 @@ Optional properties:
- - nxp,totem-pole : use totem pole (push-pull) instead of open-drain (pca9632 defaults
-   to open-drain, newer chips to totem pole)
- - nxp,hw-blink : use hardware blinking instead of software blinking
-+- nxp,period-scale : In some configurations, the chip blinks faster than expected.
-+		     This parameter provides a scaling ratio (fixed point, decimal divided
-+		     by 1000) to compensate, e.g. 1300=1.3x and 750=0.75x.
- 
- Each led is represented as a sub-node of the nxp,pca963x device.
- 
-diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
-index 9f76e49..488bec5 100644
---- a/drivers/leds/leds-pca963x.c
-+++ b/drivers/leds/leds-pca963x.c
-@@ -59,6 +59,7 @@ struct pca963x_chipdef {
- 	u8			grpfreq;
- 	u8			ledout_base;
- 	int			n_leds;
-+	unsigned int		scaling;
- };
- 
- static struct pca963x_chipdef pca963x_chipdefs[] = {
-@@ -189,6 +190,14 @@ static int pca963x_led_set(struct led_classdev *led_cdev,
- 	return pca963x_brightness(pca963x, value);
- }
- 
-+static unsigned int pca963x_period_scale(struct pca963x_led *pca963x,
-+	unsigned int val)
-+{
-+	unsigned int scaling = pca963x->chip->chipdef->scaling;
-+
-+	return scaling ? DIV_ROUND_CLOSEST(val * scaling, 1000) : val;
-+}
-+
- static int pca963x_blink_set(struct led_classdev *led_cdev,
- 		unsigned long *delay_on, unsigned long *delay_off)
- {
-@@ -207,14 +216,14 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
- 		time_off = 500;
- 	}
- 
--	period = time_on + time_off;
-+	period = pca963x_period_scale(pca963x, time_on + time_off);
- 
- 	/* If period not supported by hardware, default to someting sane. */
- 	if ((period < PCA963X_BLINK_PERIOD_MIN) ||
- 	    (period > PCA963X_BLINK_PERIOD_MAX)) {
- 		time_on = 500;
- 		time_off = 500;
--		period = time_on + time_off;
-+		period = pca963x_period_scale(pca963x, 1000);
- 	}
- 
- 	/*
-@@ -222,7 +231,7 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
- 	 *	(time_on / period) = (GDC / 256) ->
- 	 *		GDC = ((time_on * 256) / period)
- 	 */
--	gdc = (time_on * 256) / period;
-+	gdc = (pca963x_period_scale(pca963x, time_on) * 256) / period;
- 
- 	/*
- 	 * From manual: period = ((GFRQ + 1) / 24) in seconds.
-@@ -297,6 +306,9 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
- 	else
- 		pdata->blink_type = PCA963X_SW_BLINK;
- 
-+	if (of_property_read_u32(np, "nxp,period-scale", &chip->scaling))
-+		chip->scaling = 1000;
-+
- 	return pdata;
- }
- 
-
-From 38feae9e6e6194ae2ad65eeaeb163a8f766d9a1d Mon Sep 17 00:00:00 2001
-From: Matt Ranostay <matt@ranostay.consulting>
-Date: Mon, 26 Sep 2016 19:00:39 -0700
-Subject: [PATCH 3/3] arm: devicetree: omap3-anvl: add scaling value for
- pca9632 device
-
-Add nxp,period-scale property for scaling the period to workaround
-hardware errata
-
-Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
----
- arch/arm/boot/dts/omap3-anvl.dts | 1 +
- 1 file changed, 1 insertion(+)
-
-diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
-index 3b272c5..c0adb5e 100644
---- a/arch/arm/boot/dts/omap3-anvl.dts
-+++ b/arch/arm/boot/dts/omap3-anvl.dts
-@@ -280,6 +280,7 @@
- 		#address-cells = <1>;
- 		#size-cells = <0>;
- 		reg = <0x62>;
-+		nxp,period-scale = <1300>;
- 		nxp,hw-blink;
- 
- 		red@0 {
-From 8a3d476cd26dd91347ac375c577a3bdd54bdc54a Mon Sep 17 00:00:00 2001
-From: Liam <github@networkimprov.net>
-Date: Thu, 22 Sep 2016 12:40:21 -0700
-Subject: [PATCH] net: mwifiex: p2p peer disappears after disconnect fix
-
-P2p host name disappears from the list of p2p peers on the other p2p device
-after disconnection.
-In the driver, virtual interface was not changed from p2p to station after
-disconnection. This patch ensures that the p2p host name will be
-present even after the disconnection.
-
-Signed-off-by: Karthik D A <karthida@marvell.com>
----
- drivers/net/wireless/marvell/mwifiex/cfg80211.c | 6 ++++++
- 1 file changed, 6 insertions(+)
-
-diff --git a/drivers/net/wireless/marvell/mwifiex/cfg80211.c b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
-index ff948a9..8e62897 100644
---- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
-+++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
-@@ -1157,6 +1157,12 @@ mwifiex_cfg80211_change_virtual_intf(struct wiphy *wiphy,
- 			priv->adapter->curr_iface_comb.p2p_intf--;
- 			priv->adapter->curr_iface_comb.sta_intf++;
- 			dev->ieee80211_ptr->iftype = type;
-+			if (mwifiex_deinit_priv_params(priv))
-+				return -1;
-+			if (mwifiex_init_new_priv_params(priv, dev, type))
-+				return -1;
-+			if (mwifiex_sta_init_cmd(priv, false, false))
-+				return -1;
- 			break;
- 		case NL80211_IFTYPE_ADHOC:
- 			if (mwifiex_cfg80211_deinit_p2p(priv))
-From 54f56c3ad7f8f1d4b6950e20b047084213862214 Mon Sep 17 00:00:00 2001
-From: Liam <github@networkimprov.net>
-Date: Wed, 21 Sep 2016 10:57:53 -0700
-Subject: [PATCH] dts: twl4030.dtsi rtc name
-
----
- arch/arm/boot/dts/twl4030.dtsi | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
-diff --git a/arch/arm/boot/dts/twl4030.dtsi b/arch/arm/boot/dts/twl4030.dtsi
-index 36ae916..8b5ca8d 100644
---- a/arch/arm/boot/dts/twl4030.dtsi
-+++ b/arch/arm/boot/dts/twl4030.dtsi
-@@ -14,7 +14,7 @@
- 	interrupt-controller;
- 	#interrupt-cells = <1>;
- 
--	rtc {
-+	twl_rtc: rtc {
- 		compatible = "ti,twl4030-rtc";
- 		interrupts = <11>;
- 	};
-From cfb3ba8cd5f39e08f9c459dddb9984507a0ea816 Mon Sep 17 00:00:00 2001
-From: Matt Ranostay <matt@ranostay.consulting>
-Date: Mon, 19 Sep 2016 15:35:10 -0700
-Subject: [PATCH] phy: phy-twl4030-usb: emit VBUS status events to userspace
-
-Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
----
- drivers/phy/phy-twl4030-usb.c | 3 +++
- 1 file changed, 3 insertions(+)
-
-diff --git a/drivers/phy/phy-twl4030-usb.c b/drivers/phy/phy-twl4030-usb.c
-index d9b10a3..4830392 100644
---- a/drivers/phy/phy-twl4030-usb.c
-+++ b/drivers/phy/phy-twl4030-usb.c
-@@ -316,6 +316,9 @@ static enum musb_vbus_id_status
- 			linkstat = MUSB_VBUS_OFF;
- 	}
- 
-+	kobject_uevent(&twl->dev->kobj, linkstat == MUSB_VBUS_VALID
-+					? KOBJ_ONLINE : KOBJ_OFFLINE);
-+
- 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
- 			status, status, linkstat);
- 
 From 9d875c5e6f604f55e14c3d8c6b7cf6d4b5fd6224 Mon Sep 17 00:00:00 2001
 From: Liam <github@networkimprov.net>
 Date: Sun, 18 Sep 2016 18:07:21 -0700
-Subject: [PATCH 1/5] power: bq24190_charger: call power_supply_changed() for
+Subject: [PATCH 1/4] power: bq24190_charger: call power_supply_changed() for
  relevant component
 
 When fault or status registers have changes, determine whether
@@ -422,7 +190,7 @@ index f5746b9..fc33fb0 100644
 From 5fb46561d4d875f338c2473077e325327589376d Mon Sep 17 00:00:00 2001
 From: Liam <github@networkimprov.net>
 Date: Thu, 22 Sep 2016 00:09:14 -0700
-Subject: [PATCH 2/5] power: bq24190_charger: don't read fault register outside
+Subject: [PATCH 2/4] power: bq24190_charger: don't read fault register outside
  irq_handle_thread()
 
 Caching the fault register after a single read may not keep an accurate
@@ -662,110 +430,10 @@ index fc33fb0..b51eac1 100644
  	pm_runtime_get_sync(bdi->dev);
  	bq24190_register_reset(bdi);
 
-From 81aef9f3f153d68fbbf5e307d90f9e825128cb0d Mon Sep 17 00:00:00 2001
+From 1ada1301706667a4fd2e313e7173806df1e8b302 Mon Sep 17 00:00:00 2001
 From: Liam <github@networkimprov.net>
-Date: Thu, 22 Sep 2016 00:43:17 -0700
-Subject: [PATCH 3/5] power: bq24190_charger: enable gpio to assert charger otg
- pin
-
-If "gpio-otg" named in dts config, set gpio high when IINLIM==2 to
-enable 500mA current draw. Also turn off HIZ mode, which the charger
-turns on when battery is near-full.
----
- drivers/power/bq24190_charger.c | 40 ++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 40 insertions(+)
-
-diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
-index b51eac1..5ada34b 100644
---- a/drivers/power/bq24190_charger.c
-+++ b/drivers/power/bq24190_charger.c
-@@ -11,6 +11,7 @@
- #include <linux/module.h>
- #include <linux/interrupt.h>
- #include <linux/delay.h>
-+#include <linux/of_gpio.h>
- #include <linux/of_irq.h>
- #include <linux/of_device.h>
- #include <linux/pm_runtime.h>
-@@ -32,6 +33,7 @@
- #define BQ24190_REG_ISC_VINDPM_SHIFT		3
- #define BQ24190_REG_ISC_IINLIM_MASK		(BIT(2) | BIT(1) | BIT(0))
- #define BQ24190_REG_ISC_IINLIM_SHIFT		0
-+#define BQ24190_REG_ISC_IINLIM_500MA		BIT(1)
- 
- #define BQ24190_REG_POC		0x01 /* Power-On Configuration */
- #define BQ24190_REG_POC_RESET_MASK		BIT(7)
-@@ -155,6 +157,7 @@ struct bq24190_dev_info {
- 	char				model_name[I2C_NAME_SIZE];
- 	kernel_ulong_t			model;
- 	unsigned int			gpio_int;
-+	struct gpio_desc		*gpio_otg;
- 	unsigned int			irq;
- 	rwlock_t			f_reg_lock;
- 	u8				f_reg;
-@@ -536,6 +539,32 @@ static int bq24190_register_reset(struct bq24190_dev_info *bdi)
- 	return 0;
- }
- 
-+static int bq24190_update_otg(struct bq24190_dev_info *bdi, bool pg_state)
-+{
-+	if (IS_ERR(bdi->gpio_otg))
-+		return 0;
-+
-+	if (pg_state) {
-+		u8 inlim;
-+		int ret = bq24190_write_mask(bdi, BQ24190_REG_ISC,
-+				BQ24190_REG_ISC_EN_HIZ_MASK,
-+				BQ24190_REG_ISC_EN_HIZ_SHIFT, 0);
-+		if (ret < 0)
-+			return ret;
-+
-+		ret = bq24190_read_mask(bdi, BQ24190_REG_ISC,
-+				 BQ24190_REG_ISC_IINLIM_MASK,
-+				 BQ24190_REG_ISC_IINLIM_SHIFT, &inlim);
-+		if (ret < 0)
-+			return ret;
-+
-+		pg_state = inlim == BQ24190_REG_ISC_IINLIM_500MA;
-+	}
-+	gpiod_set_value_cansleep(bdi->gpio_otg, pg_state);
-+
-+	return 0;
-+}
-+
- /* Charger power supply property routines */
- 
- static int bq24190_charger_get_charge_type(struct bq24190_dev_info *bdi,
-@@ -1223,6 +1252,14 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
- 					ret);
- 		}
- 
-+		if ((bdi->ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK) !=
-+				(ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK)) {
-+			ret = bq24190_update_otg(bdi,
-+				!!(ss_reg & BQ24190_REG_SS_PG_STAT_MASK));
-+			if (ret < 0)
-+				dev_err(bdi->dev, "Can't update OTG state\n");
-+		}
-+
- 		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss)) {
- 			/* copy battery-related bits to saved ss_reg */
- 			bdi->ss_reg &= ~battery_mask_ss;
-@@ -1288,6 +1325,9 @@ static int bq24190_setup_dt(struct bq24190_dev_info *bdi)
- 	if (bdi->irq <= 0)
- 		return -1;
- 
-+	bdi->gpio_otg = devm_gpiod_get_optional(&bdi->client->dev,
-+						"gpio-otg", GPIOD_OUT_LOW);
-+
- 	return 0;
- }
- #else
-
-From 18ca99a4c4cda4dd4d543b575f236dd5cee2bf32 Mon Sep 17 00:00:00 2001
-From: Liam <github@networkimprov.net>
-Date: Sat, 24 Sep 2016 13:01:27 -0700
-Subject: [PATCH 4/5] power: bq24190_charger: install irq_handler_thread() at
+Date: Thu, 6 Oct 2016 01:17:52 -0700
+Subject: [PATCH 3/4] power: bq24190_charger: install irq_handler_thread() at
  end of probe()
 
 ---
@@ -773,10 +441,10 @@ Subject: [PATCH 4/5] power: bq24190_charger: install irq_handler_thread() at
  1 file changed, 16 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
-index 5ada34b..f1b7856 100644
+index b51eac1..54c8952 100644
 --- a/drivers/power/bq24190_charger.c
 +++ b/drivers/power/bq24190_charger.c
-@@ -1406,22 +1406,13 @@ static int bq24190_probe(struct i2c_client *client,
+@@ -1366,22 +1366,13 @@ static int bq24190_probe(struct i2c_client *client,
  		return -EINVAL;
  	}
  
@@ -800,7 +468,7 @@ index 5ada34b..f1b7856 100644
  	}
  
  	charger_cfg.drv_data = bdi;
-@@ -1432,7 +1423,7 @@ static int bq24190_probe(struct i2c_client *client,
+@@ -1392,7 +1383,7 @@ static int bq24190_probe(struct i2c_client *client,
  	if (IS_ERR(bdi->charger)) {
  		dev_err(dev, "Can't register charger\n");
  		ret = PTR_ERR(bdi->charger);
@@ -809,7 +477,7 @@ index 5ada34b..f1b7856 100644
  	}
  
  	battery_cfg.drv_data = bdi;
-@@ -1441,24 +1432,34 @@ static int bq24190_probe(struct i2c_client *client,
+@@ -1401,24 +1392,34 @@ static int bq24190_probe(struct i2c_client *client,
  	if (IS_ERR(bdi->battery)) {
  		dev_err(dev, "Can't register battery\n");
  		ret = PTR_ERR(bdi->battery);
@@ -849,10 +517,10 @@ index 5ada34b..f1b7856 100644
  		gpio_free(bdi->gpio_int);
  
 
-From fc8a1c726e6db43cc3630b4748bf57b16a60c838 Mon Sep 17 00:00:00 2001
+From c9ef01a977a6defb1aa4be878cf9ccc13df6b929 Mon Sep 17 00:00:00 2001
 From: Liam <github@networkimprov.net>
-Date: Sat, 24 Sep 2016 18:08:47 -0700
-Subject: [PATCH 5/5] power: bq24190_charger: install irq_handler_thread() with
+Date: Thu, 6 Oct 2016 01:30:58 -0700
+Subject: [PATCH 4/4] power: bq24190_charger: install irq_handler_thread() with
  IRQF_TRIGGER_FALLING
 
 ---
@@ -860,10 +528,10 @@ Subject: [PATCH 5/5] power: bq24190_charger: install irq_handler_thread() with
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/power/bq24190_charger.c b/drivers/power/bq24190_charger.c
-index f1b7856..b7a22cc 100644
+index 54c8952..9ddc689 100644
 --- a/drivers/power/bq24190_charger.c
 +++ b/drivers/power/bq24190_charger.c
-@@ -1443,7 +1443,7 @@ static int bq24190_probe(struct i2c_client *client,
+@@ -1403,7 +1403,7 @@ static int bq24190_probe(struct i2c_client *client,
  
  	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
  			bq24190_irq_handler_thread,
@@ -872,6 +540,238 @@ index f1b7856..b7a22cc 100644
  			"bq24190-charger", bdi);
  	if (ret < 0) {
  		dev_err(dev, "Can't set up irq handler\n");
+From 94d648c9f9ed076cef89673ab4fc33820e4808fe Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 11:35:41 -0700
+Subject: [PATCH 1/3] [DO NOT UPSTREAM] leds: leds-pca963x: disable
+ PCA963X_TOTEM_POLE option
+
+Limit output to PCA963X_OPEN_DRAIN since PCA963X_TOTEM_POLE will cause
+board damage.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/leds/leds-pca963x.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 407eba1..9f76e49 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -282,11 +282,14 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	pdata->leds.leds = pca963x_leds;
+ 	pdata->leds.num_leds = chip->n_leds;
+ 
++#if 0
+ 	/* default to open-drain unless totem pole (push-pull) is specified */
+ 	if (of_property_read_bool(np, "nxp,totem-pole"))
+ 		pdata->outdrv = PCA963X_TOTEM_POLE;
+ 	else
+ 		pdata->outdrv = PCA963X_OPEN_DRAIN;
++#endif
++	pdata->outdrv = PCA963X_OPEN_DRAIN;
+ 
+ 	/* default to software blinking unless hardware blinking is specified */
+ 	if (of_property_read_bool(np, "nxp,hw-blink"))
+
+From 937bceb904e2e97e58d41480ddb1b21c0e3fcb7c Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 12:16:36 -0700
+Subject: [PATCH 2/3] leds: leds-pca963x: workaround group blink scaling issue
+
+PCA9632TK part seems to incorrectly blink at ~1.3x of the programmed
+rate. This patchset add a nxp,period-scale devicetree property to
+adjust for this misconfiguration.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ Documentation/devicetree/bindings/leds/pca963x.txt |  3 +++
+ drivers/leds/leds-pca963x.c                        | 18 +++++++++++++++---
+ 2 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/leds/pca963x.txt b/Documentation/devicetree/bindings/leds/pca963x.txt
+index dafbe99..dfbdb12 100644
+--- a/Documentation/devicetree/bindings/leds/pca963x.txt
++++ b/Documentation/devicetree/bindings/leds/pca963x.txt
+@@ -7,6 +7,9 @@ Optional properties:
+ - nxp,totem-pole : use totem pole (push-pull) instead of open-drain (pca9632 defaults
+   to open-drain, newer chips to totem pole)
+ - nxp,hw-blink : use hardware blinking instead of software blinking
++- nxp,period-scale : In some configurations, the chip blinks faster than expected.
++		     This parameter provides a scaling ratio (fixed point, decimal divided
++		     by 1000) to compensate, e.g. 1300=1.3x and 750=0.75x.
+ 
+ Each led is represented as a sub-node of the nxp,pca963x device.
+ 
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 9f76e49..488bec5 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -59,6 +59,7 @@ struct pca963x_chipdef {
+ 	u8			grpfreq;
+ 	u8			ledout_base;
+ 	int			n_leds;
++	unsigned int		scaling;
+ };
+ 
+ static struct pca963x_chipdef pca963x_chipdefs[] = {
+@@ -189,6 +190,14 @@ static int pca963x_led_set(struct led_classdev *led_cdev,
+ 	return pca963x_brightness(pca963x, value);
+ }
+ 
++static unsigned int pca963x_period_scale(struct pca963x_led *pca963x,
++	unsigned int val)
++{
++	unsigned int scaling = pca963x->chip->chipdef->scaling;
++
++	return scaling ? DIV_ROUND_CLOSEST(val * scaling, 1000) : val;
++}
++
+ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		unsigned long *delay_on, unsigned long *delay_off)
+ {
+@@ -207,14 +216,14 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		time_off = 500;
+ 	}
+ 
+-	period = time_on + time_off;
++	period = pca963x_period_scale(pca963x, time_on + time_off);
+ 
+ 	/* If period not supported by hardware, default to someting sane. */
+ 	if ((period < PCA963X_BLINK_PERIOD_MIN) ||
+ 	    (period > PCA963X_BLINK_PERIOD_MAX)) {
+ 		time_on = 500;
+ 		time_off = 500;
+-		period = time_on + time_off;
++		period = pca963x_period_scale(pca963x, 1000);
+ 	}
+ 
+ 	/*
+@@ -222,7 +231,7 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 	 *	(time_on / period) = (GDC / 256) ->
+ 	 *		GDC = ((time_on * 256) / period)
+ 	 */
+-	gdc = (time_on * 256) / period;
++	gdc = (pca963x_period_scale(pca963x, time_on) * 256) / period;
+ 
+ 	/*
+ 	 * From manual: period = ((GFRQ + 1) / 24) in seconds.
+@@ -297,6 +306,9 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	else
+ 		pdata->blink_type = PCA963X_SW_BLINK;
+ 
++	if (of_property_read_u32(np, "nxp,period-scale", &chip->scaling))
++		chip->scaling = 1000;
++
+ 	return pdata;
+ }
+ 
+
+From 38feae9e6e6194ae2ad65eeaeb163a8f766d9a1d Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 19:00:39 -0700
+Subject: [PATCH 3/3] arm: devicetree: omap3-anvl: add scaling value for
+ pca9632 device
+
+Add nxp,period-scale property for scaling the period to workaround
+hardware errata
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 3b272c5..c0adb5e 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -280,6 +280,7 @@
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 		reg = <0x62>;
++		nxp,period-scale = <1300>;
+ 		nxp,hw-blink;
+ 
+ 		red@0 {
+From 8a3d476cd26dd91347ac375c577a3bdd54bdc54a Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 12:40:21 -0700
+Subject: [PATCH] net: mwifiex: p2p peer disappears after disconnect fix
+
+P2p host name disappears from the list of p2p peers on the other p2p device
+after disconnection.
+In the driver, virtual interface was not changed from p2p to station after
+disconnection. This patch ensures that the p2p host name will be
+present even after the disconnection.
+
+Signed-off-by: Karthik D A <karthida@marvell.com>
+---
+ drivers/net/wireless/marvell/mwifiex/cfg80211.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/net/wireless/marvell/mwifiex/cfg80211.c b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+index ff948a9..8e62897 100644
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+@@ -1157,6 +1157,12 @@ mwifiex_cfg80211_change_virtual_intf(struct wiphy *wiphy,
+ 			priv->adapter->curr_iface_comb.p2p_intf--;
+ 			priv->adapter->curr_iface_comb.sta_intf++;
+ 			dev->ieee80211_ptr->iftype = type;
++			if (mwifiex_deinit_priv_params(priv))
++				return -1;
++			if (mwifiex_init_new_priv_params(priv, dev, type))
++				return -1;
++			if (mwifiex_sta_init_cmd(priv, false, false))
++				return -1;
+ 			break;
+ 		case NL80211_IFTYPE_ADHOC:
+ 			if (mwifiex_cfg80211_deinit_p2p(priv))
+From 54f56c3ad7f8f1d4b6950e20b047084213862214 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Wed, 21 Sep 2016 10:57:53 -0700
+Subject: [PATCH] dts: twl4030.dtsi rtc name
+
+---
+ arch/arm/boot/dts/twl4030.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/twl4030.dtsi b/arch/arm/boot/dts/twl4030.dtsi
+index 36ae916..8b5ca8d 100644
+--- a/arch/arm/boot/dts/twl4030.dtsi
++++ b/arch/arm/boot/dts/twl4030.dtsi
+@@ -14,7 +14,7 @@
+ 	interrupt-controller;
+ 	#interrupt-cells = <1>;
+ 
+-	rtc {
++	twl_rtc: rtc {
+ 		compatible = "ti,twl4030-rtc";
+ 		interrupts = <11>;
+ 	};
+From cfb3ba8cd5f39e08f9c459dddb9984507a0ea816 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 19 Sep 2016 15:35:10 -0700
+Subject: [PATCH] phy: phy-twl4030-usb: emit VBUS status events to userspace
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/phy/phy-twl4030-usb.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/phy/phy-twl4030-usb.c b/drivers/phy/phy-twl4030-usb.c
+index d9b10a3..4830392 100644
+--- a/drivers/phy/phy-twl4030-usb.c
++++ b/drivers/phy/phy-twl4030-usb.c
+@@ -316,6 +316,9 @@ static enum musb_vbus_id_status
+ 			linkstat = MUSB_VBUS_OFF;
+ 	}
+ 
++	kobject_uevent(&twl->dev->kobj, linkstat == MUSB_VBUS_VALID
++					? KOBJ_ONLINE : KOBJ_OFFLINE);
++
+ 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
+ 			status, status, linkstat);
+ 
 From 298b7a5a4e55cf5181395fd65937267d38c51895 Mon Sep 17 00:00:00 2001
 From: Liam <github@networkimprov.net>
 Date: Thu, 22 Sep 2016 09:58:06 -0700

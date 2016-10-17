@@ -5,7 +5,7 @@
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="for pocket anvl"
-pkgver="4.7.6" # must use x.y.0 for x.y so package matches uname -r
+pkgver="4.7.8" # must use x.y.0 for x.y so package matches uname -r
 pkgrel="1"
 arch=('any')
 url="https://github.com/networkimprov/linux"
