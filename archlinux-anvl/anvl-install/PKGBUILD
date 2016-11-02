@@ -8,7 +8,7 @@ arch=('i686' 'x86_64')
 url="https://github.com/networkimprov/omap3-usb-boot-install"
 license=("none")
 depends=()
-source=('makeimg-type'
+source=('makeimg.conf'
         "https://github.com/networkimprov/omap3-usb-boot-install/archive/makeimg.zip"
         "https://github.com/networkimprov/u-boot/archive/anvl-v2016.9-leds.zip")
 md5sums=(SKIP
@@ -27,7 +27,7 @@ prepare() {
 }
 
 build() {
-  read flag < makeimg-type
+  read flag < makeimg.conf
   case "$flag" in
   rootfs|initramfs|scripts)
     cd ${srcdir}/o3ubi
@@ -37,7 +37,7 @@ build() {
   none)
     echo "skipping makeimg" ;;
   *)
-    echo "makeimg-type missing or invalid" >&2; false ;;
+    echo "makeimg.conf missing or invalid" >&2; false ;;
   esac
 
   cd ${srcdir}/o3ubi/src/omap34usbboot
