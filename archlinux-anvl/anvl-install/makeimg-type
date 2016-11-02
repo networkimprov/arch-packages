@@ -1,0 +1,4 @@
+scripts
+
+# the line above gives the makeimg.sh argument during makepkg run
+# valid values: none | rootfs | initramfs | scripts

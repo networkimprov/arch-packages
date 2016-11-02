@@ -1,0 +1,9 @@
+Dependencies
+  qemu for qemu-system-arm
+  uboot-tools for mkimage
+
+Building images/* binaries
+  edit makeimg-type with argument to makeimg.sh: rootfs | initramfs | scripts
+  $ makepkg
+  first build of rootfs downloads a lot of stuff
+

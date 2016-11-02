@@ -1,0 +1,70 @@
+# Maintainer: Liam <arch@networkimprov.net>
+
+pkgname="anvl-install"
+pkgver=1.0
+pkgrel=1
+pkgdesc="ANVL USB installer"
+arch=('i686' 'x86_64')
+url="https://github.com/networkimprov/omap3-usb-boot-install"
+license=("none")
+depends=()
+source=('makeimg-type'
+        "https://github.com/networkimprov/omap3-usb-boot-install/archive/makeimg.zip"
+        "https://github.com/networkimprov/u-boot/archive/anvl-v2016.9-leds.zip")
+md5sums=(SKIP
+         SKIP
+         SKIP)
+
+prepare() {
+  ln -sf omap3-usb-boot-install-makeimg o3ubi
+  ln -sf u-boot-anvl-v2016.9-leds u-boot
+
+  sed 's/omap-usb-install/anvl-install.sh/' -i o3ubi/README
+
+  # from https://wiki.archlinux.org/index.php/Building_32-bit_packages_on_a_64-bit_system
+  #sed 's/^\(HOST_CFLAGS :=\).*/\1 -march=i686 -mtune=generic -m32 -g -O2 -Wall/' \
+  #  -i o3ubi/src/omap34usbboot/Makefile
+}
+
+build() {
+  read flag < makeimg-type
+  case "$flag" in
+  rootfs|initramfs|scripts)
+    cd ${srcdir}/o3ubi
+    if [ "$flag" = rootfs ]; then rm -f images/anvl-rootfs-*.tar.gz; fi
+    ./makeimg.sh "$flag"
+    ;;
+  none)
+    echo "skipping makeimg" ;;
+  *)
+    echo "makeimg-type missing or invalid" >&2; false ;;
+  esac
+
+  cd ${srcdir}/o3ubi/src/omap34usbboot
+  export TOOLCHAIN=arm-none-eabi-
+  make -j4
+
+  cd ${srcdir}/u-boot
+  export ARCH=arm
+  export CROSS_COMPILE=arm-none-eabi-
+  make omap3_anvl_config
+  make -j4
+}
+
+package() {
+  install -Dm 755 o3ubi/src/omap34usbboot/out/{aboot,omap3_aboot,usbboot} \
+                  -t "${pkgdir}/${pkgname}/arch/x86_64/"
+
+  install -Dm 644 o3ubi/README -t "${pkgdir}/${pkgname}/"
+
+  install -Dm 755 o3ubi/omap-usb-install "${pkgdir}/${pkgname}/anvl-install.sh"
+
+  install -Dm 755 o3ubi/makeimg.sh -t "${pkgdir}/${pkgname}/"
+
+  cp -a           o3ubi/{images,rootfs,scripts} "${pkgdir}/${pkgname}/"
+
+  install -Dm 644 o3ubi/src/scripts/* -t "${pkgdir}/${pkgname}/src/scripts/"
+
+  install -Dm 644 u-boot/{MLO,u-boot.bin,u-boot.img} -t "${pkgdir}/${pkgname}/images/"
+}
+
