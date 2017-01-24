@@ -1,0 +1,1424 @@
+From d97556c8012015901a3ce77f46960078139cd79d Mon Sep 17 00:00:00 2001
+From: Tony Lindgren <tony@atomide.com>
+Date: Thu, 5 Jan 2017 11:07:18 -0800
+Subject: ARM: dts: Fix omap3 off mode pull defines
+
+We need to also have OFFPULLUDENABLE bit set to use the off mode pull values.
+Otherwise the line is pulled down internally if no external pull exists.
+
+This is has some documentation at:
+
+http://processors.wiki.ti.com/index.php/Optimizing_OMAP35x_and_AM/DM37x_OFF_mode_PAD_configuration
+
+Note that the value is still glitchy during off mode transitions as documented
+in spz319f.pdf "Advisory 1.45". It's best to use external pulls instead of
+relying on the internal ones for off mode and even then anything pulled up
+will get driven down momentarily on off mode restore for GPIO banks other
+than bank1.
+
+Signed-off-by: Tony Lindgren <tony@atomide.com>
+---
+ include/dt-bindings/pinctrl/omap.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/dt-bindings/pinctrl/omap.h b/include/dt-bindings/pinctrl/omap.h
+index effadd0..fbd6f72 100644
+--- a/include/dt-bindings/pinctrl/omap.h
++++ b/include/dt-bindings/pinctrl/omap.h
+@@ -45,8 +45,8 @@
+ #define PIN_OFF_NONE		0
+ #define PIN_OFF_OUTPUT_HIGH	(OFF_EN | OFFOUT_EN | OFFOUT_VAL)
+ #define PIN_OFF_OUTPUT_LOW	(OFF_EN | OFFOUT_EN)
+-#define PIN_OFF_INPUT_PULLUP	(OFF_EN | OFF_PULL_EN | OFF_PULL_UP)
+-#define PIN_OFF_INPUT_PULLDOWN	(OFF_EN | OFF_PULL_EN)
++#define PIN_OFF_INPUT_PULLUP	(OFF_EN | OFFOUT_EN | OFF_PULL_EN | OFF_PULL_UP)
++#define PIN_OFF_INPUT_PULLDOWN	(OFF_EN | OFFOUT_EN | OFF_PULL_EN)
+ #define PIN_OFF_WAKEUPENABLE	WAKEUP_EN
+ 
+ /*
+-- 
+cgit v0.12
+
+From 950b6c2d110e8df65b9d2704cc7039f3d0d9f7b2 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <mranostay@gmail.com>
+Date: Fri, 30 Sep 2016 21:45:30 -0700
+Subject: power: supply: bq27xxx_battery: don't update poll_interval param if
+ same
+
+To avoid canceling the delayed workqueue needlessly, and scheduling an
+immediate polling. Check if the new poll_interval value is different
+than the previous setting.
+
+Cc: Tony Lindgren <tony@atomide.com>
+Cc: Sebastian Reichel <sre@kernel.org>
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq27xxx_battery.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/bq27xxx_battery.c b/drivers/power/supply/bq27xxx_battery.c
+index 3b0dbc6..0c343a0 100644
+--- a/drivers/power/supply/bq27xxx_battery.c
++++ b/drivers/power/supply/bq27xxx_battery.c
+@@ -397,10 +397,11 @@ static LIST_HEAD(bq27xxx_battery_devices);
+ static int poll_interval_param_set(const char *val, const struct kernel_param *kp)
+ {
+ 	struct bq27xxx_device_info *di;
++	unsigned int prev_val = *(unsigned int *) kp->arg;
+ 	int ret;
+ 
+ 	ret = param_set_uint(val, kp);
+-	if (ret < 0)
++	if (ret < 0 || prev_val == *(unsigned int *) kp->arg)
+ 		return ret;
+ 
+ 	mutex_lock(&bq27xxx_list_lock);
+-- 
+cgit v0.12
+
+From 9d052aa01b7805e7bc4ebd9e92fb3d51808dad81 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <mranostay@gmail.com>
+Date: Tue, 20 Sep 2016 19:58:04 -0700
+Subject: phy: phy-twl4030-usb: emit VBUS status events to userspace
+
+Emit KOBJ_ONLINE/KOBJ_OFFLINE action uevent on VBUS status changes.
+
+Cc: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Kishon Vijay Abraham I <kishon@ti.com>
+---
+ drivers/phy/phy-twl4030-usb.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/phy/phy-twl4030-usb.c b/drivers/phy/phy-twl4030-usb.c
+index 87e6334..daf2aa1 100644
+--- a/drivers/phy/phy-twl4030-usb.c
++++ b/drivers/phy/phy-twl4030-usb.c
+@@ -317,6 +317,9 @@ static enum musb_vbus_id_status
+ 			linkstat = MUSB_VBUS_OFF;
+ 	}
+ 
++	kobject_uevent(&twl->dev->kobj, linkstat == MUSB_VBUS_VALID
++					? KOBJ_ONLINE : KOBJ_OFFLINE);
++
+ 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
+ 			status, status, linkstat);
+ 
+-- 
+cgit v0.12
+
+From 35c7d30179fbc17af7281ccea18e6d74c003e448 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <mranostay@gmail.com>
+Date: Thu, 13 Oct 2016 06:16:12 -0700
+Subject: leds: pca963x: workaround group blink scaling issue
+
+PCA9632TK part seems to incorrectly blink at ~1.3x of the programmed
+rate. This patchset add a nxp,period-scale devicetree property to
+adjust for this misconfiguration.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+Cc: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Jacek Anaszewski <j.anaszewski@samsung.com>
+---
+ Documentation/devicetree/bindings/leds/pca963x.txt |  3 +++
+ drivers/leds/leds-pca963x.c                        | 18 +++++++++++++++---
+ 2 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/leds/pca963x.txt b/Documentation/devicetree/bindings/leds/pca963x.txt
+index dafbe99..dfbdb12 100644
+--- a/Documentation/devicetree/bindings/leds/pca963x.txt
++++ b/Documentation/devicetree/bindings/leds/pca963x.txt
+@@ -7,6 +7,9 @@ Optional properties:
+ - nxp,totem-pole : use totem pole (push-pull) instead of open-drain (pca9632 defaults
+   to open-drain, newer chips to totem pole)
+ - nxp,hw-blink : use hardware blinking instead of software blinking
++- nxp,period-scale : In some configurations, the chip blinks faster than expected.
++		     This parameter provides a scaling ratio (fixed point, decimal divided
++		     by 1000) to compensate, e.g. 1300=1.3x and 750=0.75x.
+ 
+ Each led is represented as a sub-node of the nxp,pca963x device.
+ 
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 407eba1..b6ce1f2 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -59,6 +59,7 @@ struct pca963x_chipdef {
+ 	u8			grpfreq;
+ 	u8			ledout_base;
+ 	int			n_leds;
++	unsigned int		scaling;
+ };
+ 
+ static struct pca963x_chipdef pca963x_chipdefs[] = {
+@@ -189,6 +190,14 @@ static int pca963x_led_set(struct led_classdev *led_cdev,
+ 	return pca963x_brightness(pca963x, value);
+ }
+ 
++static unsigned int pca963x_period_scale(struct pca963x_led *pca963x,
++	unsigned int val)
++{
++	unsigned int scaling = pca963x->chip->chipdef->scaling;
++
++	return scaling ? DIV_ROUND_CLOSEST(val * scaling, 1000) : val;
++}
++
+ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		unsigned long *delay_on, unsigned long *delay_off)
+ {
+@@ -207,14 +216,14 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 		time_off = 500;
+ 	}
+ 
+-	period = time_on + time_off;
++	period = pca963x_period_scale(pca963x, time_on + time_off);
+ 
+ 	/* If period not supported by hardware, default to someting sane. */
+ 	if ((period < PCA963X_BLINK_PERIOD_MIN) ||
+ 	    (period > PCA963X_BLINK_PERIOD_MAX)) {
+ 		time_on = 500;
+ 		time_off = 500;
+-		period = time_on + time_off;
++		period = pca963x_period_scale(pca963x, 1000);
+ 	}
+ 
+ 	/*
+@@ -222,7 +231,7 @@ static int pca963x_blink_set(struct led_classdev *led_cdev,
+ 	 *	(time_on / period) = (GDC / 256) ->
+ 	 *		GDC = ((time_on * 256) / period)
+ 	 */
+-	gdc = (time_on * 256) / period;
++	gdc = (pca963x_period_scale(pca963x, time_on) * 256) / period;
+ 
+ 	/*
+ 	 * From manual: period = ((GFRQ + 1) / 24) in seconds.
+@@ -294,6 +303,9 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	else
+ 		pdata->blink_type = PCA963X_SW_BLINK;
+ 
++	if (of_property_read_u32(np, "nxp,period-scale", &chip->scaling))
++		chip->scaling = 1000;
++
+ 	return pdata;
+ }
+ 
+-- 
+cgit v0.12
+
+From a8c170b015ff6695641bdfbdb74729411ba1e9e5 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <mranostay@gmail.com>
+Date: Fri, 28 Oct 2016 18:20:42 -0700
+Subject: leds: pca963x: enable low-power state
+
+Allow chip to enter low power state when no LEDs are being lit or in
+blink mode.
+
+Cc: Peter Meerwald <p.meerwald@bct-electronic.com>,
+Cc: Ricardo Ribalda <ricardo.ribalda@gmail.com>
+Cc: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+Signed-off-by: Jacek Anaszewski <j.anaszewski@samsung.com>
+---
+ drivers/leds/leds-pca963x.c | 40 +++++++++++++++++++++++++++++++++-------
+ 1 file changed, 33 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index b6ce1f2..46fbf93 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -103,6 +103,7 @@ struct pca963x {
+ 	struct mutex mutex;
+ 	struct i2c_client *client;
+ 	struct pca963x_led *leds;
++	unsigned long leds_on;
+ };
+ 
+ struct pca963x_led {
+@@ -124,7 +125,6 @@ static int pca963x_brightness(struct pca963x_led *pca963x,
+ 	u8 mask = 0x3 << shift;
+ 	int ret;
+ 
+-	mutex_lock(&pca963x->chip->mutex);
+ 	ledout = i2c_smbus_read_byte_data(pca963x->chip->client, ledout_addr);
+ 	switch (brightness) {
+ 	case LED_FULL:
+@@ -141,14 +141,13 @@ static int pca963x_brightness(struct pca963x_led *pca963x,
+ 			PCA963X_PWM_BASE + pca963x->led_num,
+ 			brightness);
+ 		if (ret < 0)
+-			goto unlock;
++			return ret;
+ 		ret = i2c_smbus_write_byte_data(pca963x->chip->client,
+ 			ledout_addr,
+ 			(ledout & ~mask) | (PCA963X_LED_PWM << shift));
+ 		break;
+ 	}
+-unlock:
+-	mutex_unlock(&pca963x->chip->mutex);
++
+ 	return ret;
+ }
+ 
+@@ -180,14 +179,41 @@ static void pca963x_blink(struct pca963x_led *pca963x)
+ 	mutex_unlock(&pca963x->chip->mutex);
+ }
+ 
++static int pca963x_power_state(struct pca963x_led *pca963x)
++{
++	unsigned long *leds_on = &pca963x->chip->leds_on;
++	unsigned long cached_leds = pca963x->chip->leds_on;
++
++	if (pca963x->led_cdev.brightness)
++		set_bit(pca963x->led_num, leds_on);
++	else
++		clear_bit(pca963x->led_num, leds_on);
++
++	if (!(*leds_on) != !cached_leds)
++		return i2c_smbus_write_byte_data(pca963x->chip->client,
++			PCA963X_MODE1, *leds_on ? 0 : BIT(4));
++
++	return 0;
++}
++
+ static int pca963x_led_set(struct led_classdev *led_cdev,
+ 	enum led_brightness value)
+ {
+ 	struct pca963x_led *pca963x;
++	int ret;
+ 
+ 	pca963x = container_of(led_cdev, struct pca963x_led, led_cdev);
+ 
+-	return pca963x_brightness(pca963x, value);
++	mutex_lock(&pca963x->chip->mutex);
++
++	ret = pca963x_brightness(pca963x, value);
++	if (ret < 0)
++		goto unlock;
++	ret = pca963x_power_state(pca963x);
++
++unlock:
++	mutex_unlock(&pca963x->chip->mutex);
++	return ret;
+ }
+ 
+ static unsigned int pca963x_period_scale(struct pca963x_led *pca963x,
+@@ -403,8 +429,8 @@ static int pca963x_probe(struct i2c_client *client,
+ 			goto exit;
+ 	}
+ 
+-	/* Disable LED all-call address and set normal mode */
+-	i2c_smbus_write_byte_data(client, PCA963X_MODE1, 0x00);
++	/* Disable LED all-call address, and power down initially */
++	i2c_smbus_write_byte_data(client, PCA963X_MODE1, BIT(4));
+ 
+ 	if (pdata) {
+ 		/* Configure output: open-drain or totem pole (push-pull) */
+-- 
+cgit v0.12
+
+From 767eee362fd72bb2ca44cc80419ca4b38c6d8369 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:48 -0800
+Subject: power: supply: bq24190_charger: Fix irq trigger to
+ IRQF_TRIGGER_FALLING
+
+The interrupt signal is TRIGGER_FALLING. This is is specified in the
+data sheet PIN FUNCTIONS: "The INT pin sends active low, 256us
+pulse to host to report charger device status and fault."
+
+Also the direction can be seen in the data sheet Figure 37 "BQ24190
+with D+/D- Detection and USB On-The-Go (OTG)" which shows a 10k
+pull-up resistor installed for the sample configurations.
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index 2f333ef..0f959ba 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -1394,7 +1394,7 @@ static int bq24190_probe(struct i2c_client *client,
+ 
+ 	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
+ 			bq24190_irq_handler_thread,
+-			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
++			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+ 			"bq24190-charger", bdi);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Can't set up irq handler\n");
+-- 
+cgit v0.12
+
+From e05ad7e0741ce0505e1df157c62b22b95172bb97 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:49 -0800
+Subject: power: supply: bq24190_charger: Call set_mode_host() on pm_resume()
+
+pm_resume() does a register_reset() which clears charger host mode.
+
+Fix by calling set_mode_host() after the reset.
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index 0f959ba..9efb5e6 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -1494,6 +1494,7 @@ static int bq24190_pm_resume(struct device *dev)
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 	bq24190_register_reset(bdi);
++	bq24190_set_mode_host(bdi);
+ 	pm_runtime_put_sync(bdi->dev);
+ 
+ 	/* Things may have changed while suspended so alert upper layer */
+-- 
+cgit v0.12
+
+From d62acc5ef0621463446091ebd7a345e06e9ab80c Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:50 -0800
+Subject: power: supply: bq24190_charger: Install irq_handler_thread() at end
+ of probe()
+
+The device specific data is not fully initialized on
+request_threaded_irq(). This may cause a crash when the IRQ handler
+tries to reference them.
+
+Fix the issue by installing IRQ handler at the end of the probe.
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 31 ++++++++++++++++---------------
+ 1 file changed, 16 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index 9efb5e6..63ea948 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -1392,22 +1392,13 @@ static int bq24190_probe(struct i2c_client *client,
+ 		return -EINVAL;
+ 	}
+ 
+-	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
+-			bq24190_irq_handler_thread,
+-			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+-			"bq24190-charger", bdi);
+-	if (ret < 0) {
+-		dev_err(dev, "Can't set up irq handler\n");
+-		goto out1;
+-	}
+-
+ 	pm_runtime_enable(dev);
+ 	pm_runtime_resume(dev);
+ 
+ 	ret = bq24190_hw_init(bdi);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Hardware init failed\n");
+-		goto out2;
++		goto out1;
+ 	}
+ 
+ 	charger_cfg.drv_data = bdi;
+@@ -1418,7 +1409,7 @@ static int bq24190_probe(struct i2c_client *client,
+ 	if (IS_ERR(bdi->charger)) {
+ 		dev_err(dev, "Can't register charger\n");
+ 		ret = PTR_ERR(bdi->charger);
+-		goto out2;
++		goto out1;
+ 	}
+ 
+ 	battery_cfg.drv_data = bdi;
+@@ -1427,24 +1418,34 @@ static int bq24190_probe(struct i2c_client *client,
+ 	if (IS_ERR(bdi->battery)) {
+ 		dev_err(dev, "Can't register battery\n");
+ 		ret = PTR_ERR(bdi->battery);
+-		goto out3;
++		goto out2;
+ 	}
+ 
+ 	ret = bq24190_sysfs_create_group(bdi);
+ 	if (ret) {
+ 		dev_err(dev, "Can't create sysfs entries\n");
++		goto out3;
++	}
++
++	ret = devm_request_threaded_irq(dev, bdi->irq, NULL,
++			bq24190_irq_handler_thread,
++			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
++			"bq24190-charger", bdi);
++	if (ret < 0) {
++		dev_err(dev, "Can't set up irq handler\n");
+ 		goto out4;
+ 	}
+ 
+ 	return 0;
+ 
+ out4:
+-	power_supply_unregister(bdi->battery);
++	bq24190_sysfs_remove_group(bdi);
+ out3:
+-	power_supply_unregister(bdi->charger);
++	power_supply_unregister(bdi->battery);
+ out2:
+-	pm_runtime_disable(dev);
++	power_supply_unregister(bdi->charger);
+ out1:
++	pm_runtime_disable(dev);
+ 	if (bdi->gpio_int)
+ 		gpio_free(bdi->gpio_int);
+ 
+-- 
+cgit v0.12
+
+From 2d9fee6a42ea170e4378b3363a7ad385d0e67281 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:52 -0800
+Subject: power: supply: bq24190_charger: Call power_supply_changed() for
+ relevant component
+
+We wrongly get uevents for bq24190-charger and bq24190-battery on every
+register change.
+
+Fix by checking the association with charger and battery before
+emitting uevent(s).
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 50 ++++++++++++++++++----------------
+ 1 file changed, 27 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index 63ea948..bf7c30a 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -159,7 +159,6 @@ struct bq24190_dev_info {
+ 	unsigned int			gpio_int;
+ 	unsigned int			irq;
+ 	struct mutex			f_reg_lock;
+-	bool				first_time;
+ 	bool				charger_health_valid;
+ 	bool				battery_health_valid;
+ 	bool				battery_status_valid;
+@@ -1197,7 +1196,10 @@ static const struct power_supply_desc bq24190_battery_desc = {
+ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ {
+ 	struct bq24190_dev_info *bdi = data;
+-	bool alert_userspace = false;
++	const u8 battery_mask_ss = BQ24190_REG_SS_CHRG_STAT_MASK;
++	const u8 battery_mask_f = BQ24190_REG_F_BAT_FAULT_MASK
++				| BQ24190_REG_F_NTC_FAULT_MASK;
++	bool alert_charger = false, alert_battery = false;
+ 	u8 ss_reg = 0, f_reg = 0;
+ 	int ret;
+ 
+@@ -1225,8 +1227,12 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 					ret);
+ 		}
+ 
++		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss))
++			alert_battery = true;
++		if ((bdi->ss_reg & ~battery_mask_ss) != (ss_reg & ~battery_mask_ss))
++			alert_charger = true;
++
+ 		bdi->ss_reg = ss_reg;
+-		alert_userspace = true;
+ 	}
+ 
+ 	mutex_lock(&bdi->f_reg_lock);
+@@ -1239,33 +1245,23 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 	}
+ 
+ 	if (f_reg != bdi->f_reg) {
++		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f))
++			alert_battery = true;
++		if ((bdi->f_reg & ~battery_mask_f) != (f_reg & ~battery_mask_f))
++			alert_charger = true;
++
+ 		bdi->f_reg = f_reg;
+ 		bdi->charger_health_valid = true;
+ 		bdi->battery_health_valid = true;
+ 		bdi->battery_status_valid = true;
+-
+-		alert_userspace = true;
+ 	}
+ 
+ 	mutex_unlock(&bdi->f_reg_lock);
+ 
+-	/*
+-	 * Sometimes bq24190 gives a steady trickle of interrupts even
+-	 * though the watchdog timer is turned off and neither the STATUS
+-	 * nor FAULT registers have changed.  Weed out these sprurious
+-	 * interrupts so userspace isn't alerted for no reason.
+-	 * In addition, the chip always generates an interrupt after
+-	 * register reset so we should ignore that one (the very first
+-	 * interrupt received).
+-	 */
+-	if (alert_userspace) {
+-		if (!bdi->first_time) {
+-			power_supply_changed(bdi->charger);
+-			power_supply_changed(bdi->battery);
+-		} else {
+-			bdi->first_time = false;
+-		}
+-	}
++	if (alert_charger)
++		power_supply_changed(bdi->charger);
++	if (alert_battery)
++		power_supply_changed(bdi->battery);
+ 
+ out:
+ 	pm_runtime_put_sync(bdi->dev);
+@@ -1300,6 +1296,10 @@ static int bq24190_hw_init(struct bq24190_dev_info *bdi)
+ 		goto out;
+ 
+ 	ret = bq24190_set_mode_host(bdi);
++	if (ret < 0)
++		goto out;
++
++	ret = bq24190_read(bdi, BQ24190_REG_SS, &bdi->ss_reg);
+ out:
+ 	pm_runtime_put_sync(bdi->dev);
+ 	return ret;
+@@ -1375,7 +1375,8 @@ static int bq24190_probe(struct i2c_client *client,
+ 	bdi->model = id->driver_data;
+ 	strncpy(bdi->model_name, id->name, I2C_NAME_SIZE);
+ 	mutex_init(&bdi->f_reg_lock);
+-	bdi->first_time = true;
++	bdi->f_reg = 0;
++	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK; /* impossible state */
+ 	bdi->charger_health_valid = false;
+ 	bdi->battery_health_valid = false;
+ 	bdi->battery_status_valid = false;
+@@ -1489,6 +1490,8 @@ static int bq24190_pm_resume(struct device *dev)
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct bq24190_dev_info *bdi = i2c_get_clientdata(client);
+ 
++	bdi->f_reg = 0;
++	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK; /* impossible state */
+ 	bdi->charger_health_valid = false;
+ 	bdi->battery_health_valid = false;
+ 	bdi->battery_status_valid = false;
+@@ -1496,6 +1499,7 @@ static int bq24190_pm_resume(struct device *dev)
+ 	pm_runtime_get_sync(bdi->dev);
+ 	bq24190_register_reset(bdi);
+ 	bq24190_set_mode_host(bdi);
++	bq24190_read(bdi, BQ24190_REG_SS, &bdi->ss_reg);
+ 	pm_runtime_put_sync(bdi->dev);
+ 
+ 	/* Things may have changed while suspended so alert upper layer */
+-- 
+cgit v0.12
+
+From 68abfb8015832ddf728b911769659468efaf8bd9 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:53 -0800
+Subject: power: supply: bq24190_charger: Don't read fault register outside
+ irq_handle_thread()
+
+Caching the fault register after a single I2C read may not keep an accurate
+value.
+
+Fix by doing two reads in irq_handle_thread() and using the cached value
+elsewhere. If a safety timer fault later clears itself, we apparently don't get
+an interrupt (INT), however other interrupts would refresh the register cache.
+
+From the data sheet: "When a fault occurs, the charger device sends out INT
+ and keeps the fault state in REG09 until the host reads the fault register.
+ Before the host reads REG09 and all the faults are cleared, the charger
+ device would not send any INT upon new faults. In order to read the
+ current fault status, the host has to read REG09 two times consecutively.
+ The 1st reads fault register status from the last read [1] and the 2nd reads
+ the current fault register status."
+
+[1] presumably a typo; should be "last fault"
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 94 ++++++++++------------------------
+ 1 file changed, 27 insertions(+), 67 deletions(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index bf7c30a..c70ce19 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -144,10 +144,7 @@
+  * so the first read after a fault returns the latched value and subsequent
+  * reads return the current value.  In order to return the fault status
+  * to the user, have the interrupt handler save the reg's value and retrieve
+- * it in the appropriate health/status routine.  Each routine has its own
+- * flag indicating whether it should use the value stored by the last run
+- * of the interrupt handler or do an actual reg read.  That way each routine
+- * can report back whatever fault may have occured.
++ * it in the appropriate health/status routine.
+  */
+ struct bq24190_dev_info {
+ 	struct i2c_client		*client;
+@@ -159,9 +156,6 @@ struct bq24190_dev_info {
+ 	unsigned int			gpio_int;
+ 	unsigned int			irq;
+ 	struct mutex			f_reg_lock;
+-	bool				charger_health_valid;
+-	bool				battery_health_valid;
+-	bool				battery_status_valid;
+ 	u8				f_reg;
+ 	u8				ss_reg;
+ 	u8				watchdog;
+@@ -635,21 +629,11 @@ static int bq24190_charger_get_health(struct bq24190_dev_info *bdi,
+ 		union power_supply_propval *val)
+ {
+ 	u8 v;
+-	int health, ret;
++	int health;
+ 
+ 	mutex_lock(&bdi->f_reg_lock);
+-
+-	if (bdi->charger_health_valid) {
+-		v = bdi->f_reg;
+-		bdi->charger_health_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &v);
+-		if (ret < 0)
+-			return ret;
+-	}
++	v = bdi->f_reg;
++	mutex_unlock(&bdi->f_reg_lock);
+ 
+ 	if (v & BQ24190_REG_F_BOOST_FAULT_MASK) {
+ 		/*
+@@ -936,18 +920,8 @@ static int bq24190_battery_get_status(struct bq24190_dev_info *bdi,
+ 	int status, ret;
+ 
+ 	mutex_lock(&bdi->f_reg_lock);
+-
+-	if (bdi->battery_status_valid) {
+-		chrg_fault = bdi->f_reg;
+-		bdi->battery_status_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &chrg_fault);
+-		if (ret < 0)
+-			return ret;
+-	}
++	chrg_fault = bdi->f_reg;
++	mutex_unlock(&bdi->f_reg_lock);
+ 
+ 	chrg_fault &= BQ24190_REG_F_CHRG_FAULT_MASK;
+ 	chrg_fault >>= BQ24190_REG_F_CHRG_FAULT_SHIFT;
+@@ -995,21 +969,11 @@ static int bq24190_battery_get_health(struct bq24190_dev_info *bdi,
+ 		union power_supply_propval *val)
+ {
+ 	u8 v;
+-	int health, ret;
++	int health;
+ 
+ 	mutex_lock(&bdi->f_reg_lock);
+-
+-	if (bdi->battery_health_valid) {
+-		v = bdi->f_reg;
+-		bdi->battery_health_valid = false;
+-		mutex_unlock(&bdi->f_reg_lock);
+-	} else {
+-		mutex_unlock(&bdi->f_reg_lock);
+-
+-		ret = bq24190_read(bdi, BQ24190_REG_F, &v);
+-		if (ret < 0)
+-			return ret;
+-	}
++	v = bdi->f_reg;
++	mutex_unlock(&bdi->f_reg_lock);
+ 
+ 	if (v & BQ24190_REG_F_BAT_FAULT_MASK) {
+ 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+@@ -1201,7 +1165,7 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 				| BQ24190_REG_F_NTC_FAULT_MASK;
+ 	bool alert_charger = false, alert_battery = false;
+ 	u8 ss_reg = 0, f_reg = 0;
+-	int ret;
++	int i, ret;
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 
+@@ -1231,33 +1195,35 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 			alert_battery = true;
+ 		if ((bdi->ss_reg & ~battery_mask_ss) != (ss_reg & ~battery_mask_ss))
+ 			alert_charger = true;
+-
+ 		bdi->ss_reg = ss_reg;
+ 	}
+ 
+-	mutex_lock(&bdi->f_reg_lock);
+-
+-	ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
+-	if (ret < 0) {
+-		mutex_unlock(&bdi->f_reg_lock);
+-		dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
+-		goto out;
+-	}
++	i = 0;
++	do {
++		ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
++		if (ret < 0) {
++			dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
++			goto out;
++		}
++	} while (f_reg && ++i < 2);
+ 
+ 	if (f_reg != bdi->f_reg) {
++		dev_info(bdi->dev,
++			"Fault: boost %d, charge %d, battery %d, ntc %d\n",
++			!!(f_reg & BQ24190_REG_F_BOOST_FAULT_MASK),
++			!!(f_reg & BQ24190_REG_F_CHRG_FAULT_MASK),
++			!!(f_reg & BQ24190_REG_F_BAT_FAULT_MASK),
++			!!(f_reg & BQ24190_REG_F_NTC_FAULT_MASK));
++
++		mutex_lock(&bdi->f_reg_lock);
+ 		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f))
+ 			alert_battery = true;
+ 		if ((bdi->f_reg & ~battery_mask_f) != (f_reg & ~battery_mask_f))
+ 			alert_charger = true;
+-
+ 		bdi->f_reg = f_reg;
+-		bdi->charger_health_valid = true;
+-		bdi->battery_health_valid = true;
+-		bdi->battery_status_valid = true;
++		mutex_unlock(&bdi->f_reg_lock);
+ 	}
+ 
+-	mutex_unlock(&bdi->f_reg_lock);
+-
+ 	if (alert_charger)
+ 		power_supply_changed(bdi->charger);
+ 	if (alert_battery)
+@@ -1377,9 +1343,6 @@ static int bq24190_probe(struct i2c_client *client,
+ 	mutex_init(&bdi->f_reg_lock);
+ 	bdi->f_reg = 0;
+ 	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK; /* impossible state */
+-	bdi->charger_health_valid = false;
+-	bdi->battery_health_valid = false;
+-	bdi->battery_status_valid = false;
+ 
+ 	i2c_set_clientdata(client, bdi);
+ 
+@@ -1492,9 +1455,6 @@ static int bq24190_pm_resume(struct device *dev)
+ 
+ 	bdi->f_reg = 0;
+ 	bdi->ss_reg = BQ24190_REG_SS_VBUS_STAT_MASK; /* impossible state */
+-	bdi->charger_health_valid = false;
+-	bdi->battery_health_valid = false;
+-	bdi->battery_status_valid = false;
+ 
+ 	pm_runtime_get_sync(bdi->dev);
+ 	bq24190_register_reset(bdi);
+-- 
+cgit v0.12
+
+From ba52e75718784fda1b683ee0bfded72a0b83b047 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:54 -0800
+Subject: power: supply: bq24190_charger: Handle fault before status on
+ interrupt
+
+Reading both fault and status registers and logging any fault should
+take priority over handling status register update.
+
+Fix by moving the status handling to later in interrupt routine.
+
+Fixes: d7bf353fd0aa3 ("bq24190_charger: Add support for TI BQ24190 Battery Charger")
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Mark Greer <mgreer@animalcreek.com>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 46 +++++++++++++++++-----------------
+ 1 file changed, 23 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index c70ce19..881f481 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -1175,29 +1175,6 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 		goto out;
+ 	}
+ 
+-	if (ss_reg != bdi->ss_reg) {
+-		/*
+-		 * The device is in host mode so when PG_STAT goes from 1->0
+-		 * (i.e., power removed) HIZ needs to be disabled.
+-		 */
+-		if ((bdi->ss_reg & BQ24190_REG_SS_PG_STAT_MASK) &&
+-				!(ss_reg & BQ24190_REG_SS_PG_STAT_MASK)) {
+-			ret = bq24190_write_mask(bdi, BQ24190_REG_ISC,
+-					BQ24190_REG_ISC_EN_HIZ_MASK,
+-					BQ24190_REG_ISC_EN_HIZ_SHIFT,
+-					0);
+-			if (ret < 0)
+-				dev_err(bdi->dev, "Can't access ISC reg: %d\n",
+-					ret);
+-		}
+-
+-		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss))
+-			alert_battery = true;
+-		if ((bdi->ss_reg & ~battery_mask_ss) != (ss_reg & ~battery_mask_ss))
+-			alert_charger = true;
+-		bdi->ss_reg = ss_reg;
+-	}
+-
+ 	i = 0;
+ 	do {
+ 		ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
+@@ -1224,6 +1201,29 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
+ 		mutex_unlock(&bdi->f_reg_lock);
+ 	}
+ 
++	if (ss_reg != bdi->ss_reg) {
++		/*
++		 * The device is in host mode so when PG_STAT goes from 1->0
++		 * (i.e., power removed) HIZ needs to be disabled.
++		 */
++		if ((bdi->ss_reg & BQ24190_REG_SS_PG_STAT_MASK) &&
++				!(ss_reg & BQ24190_REG_SS_PG_STAT_MASK)) {
++			ret = bq24190_write_mask(bdi, BQ24190_REG_ISC,
++					BQ24190_REG_ISC_EN_HIZ_MASK,
++					BQ24190_REG_ISC_EN_HIZ_SHIFT,
++					0);
++			if (ret < 0)
++				dev_err(bdi->dev, "Can't access ISC reg: %d\n",
++					ret);
++		}
++
++		if ((bdi->ss_reg & battery_mask_ss) != (ss_reg & battery_mask_ss))
++			alert_battery = true;
++		if ((bdi->ss_reg & ~battery_mask_ss) != (ss_reg & ~battery_mask_ss))
++			alert_charger = true;
++		bdi->ss_reg = ss_reg;
++	}
++
+ 	if (alert_charger)
+ 		power_supply_changed(bdi->charger);
+ 	if (alert_battery)
+-- 
+cgit v0.12
+
+From cb190af290329c281ed2fbaf41ce6e4686b69922 Mon Sep 17 00:00:00 2001
+From: Liam Breck <liam@networkimprov.net>
+Date: Wed, 18 Jan 2017 09:26:51 -0800
+Subject: power: supply: bq24190_charger: Adjust formatting
+
+Add breathing room in probe() out* section.
+
+Signed-off-by: Liam Breck <kernel@networkimprov.net>
+Acked-by: Tony Lindgren <tony@atomide.com>
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/power/supply/bq24190_charger.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/bq24190_charger.c b/drivers/power/supply/bq24190_charger.c
+index 881f481..a4f0849 100644
+--- a/drivers/power/supply/bq24190_charger.c
++++ b/drivers/power/supply/bq24190_charger.c
+@@ -1404,15 +1404,17 @@ static int bq24190_probe(struct i2c_client *client,
+ 
+ out4:
+ 	bq24190_sysfs_remove_group(bdi);
++
+ out3:
+ 	power_supply_unregister(bdi->battery);
++
+ out2:
+ 	power_supply_unregister(bdi->charger);
++
+ out1:
+ 	pm_runtime_disable(dev);
+ 	if (bdi->gpio_int)
+ 		gpio_free(bdi->gpio_int);
+-
+ 	return ret;
+ }
+ 
+-- 
+cgit v0.12
+
+From a6bb73fa4ded3e90a251d909117c2b5b35f40526 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Tue, 20 Sep 2016 02:37:27 -0700
+Subject: [PATCH 1/3] omap2plus_defconfig: build in RTC_DRV_TWL4030
+
+---
+ arch/arm/configs/omap2plus_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/configs/omap2plus_defconfig b/arch/arm/configs/omap2plus_defconfig
+index ac717cc..1a10b3d 100644
+--- a/arch/arm/configs/omap2plus_defconfig
++++ b/arch/arm/configs/omap2plus_defconfig
+@@ -412,7 +412,7 @@ CONFIG_LEDS_TRIGGER_DEFAULT_ON=m
+ CONFIG_RTC_CLASS=y
+ CONFIG_RTC_DRV_DS1307=m
+ CONFIG_RTC_DRV_TWL92330=y
+-CONFIG_RTC_DRV_TWL4030=m
++CONFIG_RTC_DRV_TWL4030=y
+ CONFIG_RTC_DRV_PALMAS=m
+ CONFIG_RTC_DRV_OMAP=m
+ CONFIG_DMADEVICES=y
+
+From 455614289813aa63fa533bbfb788e7706cc72c8e Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Wed, 7 Sep 2016 15:07:47 -0700
+Subject: [PATCH 2/3] arch: arm: defconfigs: add pstore to omap2plus_defconfig
+
+Enable CONFIG_PSTORE and CONFIG_PSTORE_RAM in omap2plus_defconfig
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/configs/omap2plus_defconfig | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm/configs/omap2plus_defconfig b/arch/arm/configs/omap2plus_defconfig
+index 1a10b3d..484b118 100644
+--- a/arch/arm/configs/omap2plus_defconfig
++++ b/arch/arm/configs/omap2plus_defconfig
+@@ -454,6 +454,9 @@ CONFIG_JFFS2_LZO=y
+ CONFIG_JFFS2_RUBIN=y
+ CONFIG_UBIFS_FS=y
+ CONFIG_CRAMFS=y
++CONFIG_PSTORE=y
++CONFIG_PSTORE_RAM=y
++CONFIG_PSTORE_CONSOLE=y
+ CONFIG_NFS_FS=y
+ CONFIG_NFS_V3_ACL=y
+ CONFIG_NFS_V4=y
+
+From 082a00a080e1a0b0479b92cd87d633c88bdf8eea Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Sun, 20 Nov 2016 16:21:36 -0800
+Subject: [PATCH 3/3] configs: omap2plus_defconfig: add pwrseq_sd8787
+
+---
+ arch/arm/configs/omap2plus_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/configs/omap2plus_defconfig b/arch/arm/configs/omap2plus_defconfig
+index 484b118..63f050e 100644
+--- a/arch/arm/configs/omap2plus_defconfig
++++ b/arch/arm/configs/omap2plus_defconfig
+@@ -186,6 +186,7 @@ CONFIG_LIBERTAS=m
+ CONFIG_LIBERTAS_USB=m
+ CONFIG_LIBERTAS_SDIO=m
+ CONFIG_LIBERTAS_DEBUG=y
++CONFIG_PWRSEQ_SD8787=m
+ CONFIG_MWIFIEX=m
+ CONFIG_MWIFIEX_SDIO=m
+ CONFIG_MWIFIEX_USB=m
+--
+github
+
+From 94d648c9f9ed076cef89673ab4fc33820e4808fe Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 26 Sep 2016 11:35:41 -0700
+Subject: [PATCH] [DO NOT UPSTREAM] leds: leds-pca963x: disable
+ PCA963X_TOTEM_POLE option
+
+Limit output to PCA963X_OPEN_DRAIN since PCA963X_TOTEM_POLE will cause
+board damage.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/leds/leds-pca963x.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/leds/leds-pca963x.c b/drivers/leds/leds-pca963x.c
+index 407eba1..9f76e49 100644
+--- a/drivers/leds/leds-pca963x.c
++++ b/drivers/leds/leds-pca963x.c
+@@ -282,11 +282,14 @@ pca963x_dt_init(struct i2c_client *client, struct pca963x_chipdef *chip)
+ 	pdata->leds.leds = pca963x_leds;
+ 	pdata->leds.num_leds = chip->n_leds;
+ 
++#if 0
+ 	/* default to open-drain unless totem pole (push-pull) is specified */
+ 	if (of_property_read_bool(np, "nxp,totem-pole"))
+ 		pdata->outdrv = PCA963X_TOTEM_POLE;
+ 	else
+ 		pdata->outdrv = PCA963X_OPEN_DRAIN;
++#endif
++	pdata->outdrv = PCA963X_OPEN_DRAIN;
+ 
+ 	/* default to software blinking unless hardware blinking is specified */
+ 	if (of_property_read_bool(np, "nxp,hw-blink"))
+--
+github
+
+From 8a3d476cd26dd91347ac375c577a3bdd54bdc54a Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 22 Sep 2016 12:40:21 -0700
+Subject: [PATCH] net: mwifiex: p2p peer disappears after disconnect fix
+
+P2p host name disappears from the list of p2p peers on the other p2p device
+after disconnection.
+In the driver, virtual interface was not changed from p2p to station after
+disconnection. This patch ensures that the p2p host name will be
+present even after the disconnection.
+
+Signed-off-by: Karthik D A <karthida@marvell.com>
+---
+ drivers/net/wireless/marvell/mwifiex/cfg80211.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/net/wireless/marvell/mwifiex/cfg80211.c b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+index ff948a9..8e62897 100644
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+@@ -1157,6 +1157,12 @@ mwifiex_cfg80211_change_virtual_intf(struct wiphy *wiphy,
+ 			priv->adapter->curr_iface_comb.p2p_intf--;
+ 			priv->adapter->curr_iface_comb.sta_intf++;
+ 			dev->ieee80211_ptr->iftype = type;
++			if (mwifiex_deinit_priv_params(priv))
++				return -1;
++			if (mwifiex_init_new_priv_params(priv, dev, type))
++				return -1;
++			if (mwifiex_sta_init_cmd(priv, false, false))
++				return -1;
+ 			break;
+ 		case NL80211_IFTYPE_ADHOC:
+ 			if (mwifiex_cfg80211_deinit_p2p(priv))
+--
+github
+
+From 57ea80adbdb7537f5f2ae7bfbf32c5b0ed8b1136 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Sun, 13 Nov 2016 21:47:19 -0800
+Subject: [PATCH] mmc: pwrseq: initial pwrseq support for Marvell SD8787
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/mmc/core/Kconfig         |  10 ++++
+ drivers/mmc/core/Makefile        |   1 +
+ drivers/mmc/core/pwrseq_sd8787.c | 110 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 121 insertions(+)
+ create mode 100644 drivers/mmc/core/pwrseq_sd8787.c
+
+diff --git a/drivers/mmc/core/Kconfig b/drivers/mmc/core/Kconfig
+index 250f223..68f329f 100644
+--- a/drivers/mmc/core/Kconfig
++++ b/drivers/mmc/core/Kconfig
+@@ -12,6 +12,16 @@ config PWRSEQ_EMMC
+ 	  This driver can also be built as a module. If so, the module
+ 	  will be called pwrseq_emmc.
+ 
++config PWRSEQ_SD8787
++	tristate "HW reset support for SD8787"
++	depends on OF && MWIFIEX
++	help
++	  This selects hardware reset support for the SD8787 bluetooth and wifi
++	  module.
++
++	  This driver can also be built as a module. If so, the module
++	  will be called pwrseq_simple.
++
+ config PWRSEQ_SIMPLE
+ 	tristate "Simple HW reset support for MMC"
+ 	default y
+diff --git a/drivers/mmc/core/Makefile b/drivers/mmc/core/Makefile
+index f007151..f1c060e 100644
+--- a/drivers/mmc/core/Makefile
++++ b/drivers/mmc/core/Makefile
+@@ -10,5 +10,6 @@ mmc_core-y			:= core.o bus.o host.o \
+ 				   quirks.o slot-gpio.o
+ mmc_core-$(CONFIG_OF)		+= pwrseq.o
+ obj-$(CONFIG_PWRSEQ_SIMPLE)	+= pwrseq_simple.o
++obj-$(CONFIG_PWRSEQ_SD8787)	+= pwrseq_sd8787.o
+ obj-$(CONFIG_PWRSEQ_EMMC)	+= pwrseq_emmc.o
+ mmc_core-$(CONFIG_DEBUG_FS)	+= debugfs.o
+diff --git a/drivers/mmc/core/pwrseq_sd8787.c b/drivers/mmc/core/pwrseq_sd8787.c
+new file mode 100644
+index 0000000..301a35ae
+--- /dev/null
++++ b/drivers/mmc/core/pwrseq_sd8787.c
+@@ -0,0 +1,110 @@
++/*
++ * pwrseq_sd8787.c - power sequence support for Marvell SD8787
++ *
++ * Based on pwrseq_simple.c
++ *
++ *  Copyright (C) 2014 Linaro Ltd
++ *
++ * Author: Ulf Hansson <ulf.hansson@linaro.org>
++ *
++ * License terms: GNU General Public License (GPL) version 2
++ *
++ *  Simple MMC power sequence management
++ */
++
++#include <linux/delay.h>
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/platform_device.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/gpio/consumer.h>
++
++#include <linux/mmc/host.h>
++
++#include "pwrseq.h"
++
++struct mmc_pwrseq_sd8787 {
++	struct mmc_pwrseq pwrseq;
++	struct gpio_desc *reset_gpio;
++	struct gpio_desc *pwrdn_gpio;
++};
++
++#define to_pwrseq_sd8787(p) container_of(p, struct mmc_pwrseq_sd8787, pwrseq)
++
++static void mmc_pwrseq_sd8787_pre_power_on(struct mmc_host *host)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
++
++	gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
++
++	msleep(300);
++	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
++}
++
++static void mmc_pwrseq_sd8787_power_off(struct mmc_host *host)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
++
++	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
++	gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
++}
++
++static const struct mmc_pwrseq_ops mmc_pwrseq_sd8787_ops = {
++	.pre_power_on = mmc_pwrseq_sd8787_pre_power_on,
++	.power_off = mmc_pwrseq_sd8787_power_off,
++};
++
++static const struct of_device_id mmc_pwrseq_sd8787_of_match[] = {
++	{ .compatible = "mmc-pwrseq-sd8787",},
++	{/* sentinel */},
++};
++MODULE_DEVICE_TABLE(of, mmc_pwrseq_sd8787_of_match);
++
++static int mmc_pwrseq_sd8787_probe(struct platform_device *pdev)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq;
++	struct device *dev = &pdev->dev;
++
++	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
++	if (!pwrseq)
++		return -ENOMEM;
++
++	pwrseq->pwrdn_gpio = devm_gpiod_get(dev, "pwrdn", GPIOD_OUT_LOW);
++	if (IS_ERR(pwrseq->pwrdn_gpio))
++		return PTR_ERR(pwrseq->pwrdn_gpio);
++
++	pwrseq->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(pwrseq->reset_gpio))
++		return PTR_ERR(pwrseq->reset_gpio);
++
++	pwrseq->pwrseq.dev = dev;
++	pwrseq->pwrseq.ops = &mmc_pwrseq_sd8787_ops;
++	pwrseq->pwrseq.owner = THIS_MODULE;
++	platform_set_drvdata(pdev, pwrseq);
++
++	return mmc_pwrseq_register(&pwrseq->pwrseq);
++}
++
++static int mmc_pwrseq_sd8787_remove(struct platform_device *pdev)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = platform_get_drvdata(pdev);
++
++	mmc_pwrseq_unregister(&pwrseq->pwrseq);
++
++	return 0;
++}
++
++static struct platform_driver mmc_pwrseq_sd8787_driver = {
++	.probe = mmc_pwrseq_sd8787_probe,
++	.remove = mmc_pwrseq_sd8787_remove,
++	.driver = {
++		.name = "pwrseq_sd8787",
++		.of_match_table = mmc_pwrseq_sd8787_of_match,
++	},
++};
++
++module_platform_driver(mmc_pwrseq_sd8787_driver);
++MODULE_LICENSE("GPL v2");
+--
+github
+
+From 100e6c6c6b5e3357a4e251a241becca1d237b801 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 23 Sep 2016 17:41:35 -0700
+Subject: [PATCH 1/2] arm: dts: omap3-anvl: add spi1_pins
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 3b272c5..4c5c239 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -148,6 +148,16 @@
+ 			OMAP3_CORE1_IOPAD(0x21a0, PIN_OUTPUT | MUX_MODE0)		/* uart3_tx_irtx.uart3_tx_irtx */
+ 		>;
+ 	};
++
++	mcspi1_pins: pinmux_mcspi1_pins {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x21c8, PIN_INPUT | MUX_MODE0)		/* mcspi1_clk.mcspi1_clk */
++			OMAP3_CORE1_IOPAD(0x21ca, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_mosi.mcspi1_mosi */
++			OMAP3_CORE1_IOPAD(0x21cc, PIN_INPUT | MUX_MODE0)		/* mcspi1_miso.mcspi1_miso */
++			OMAP3_CORE1_IOPAD(0x21ce, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_cs0.mcspi1_cs0 */
++			OMAP3_CORE1_IOPAD(0x21d0, PIN_OUTPUT | MUX_MODE0)		/* mcspi1_cs1.mcspi1_cs1 */
++		>;
++	};
+ };
+ 
+ &omap3_pmx_core2 {
+@@ -363,6 +373,11 @@
+ 	pinctrl-names = "default";
+ };
+ 
++&mcspi1 {
++	pinctrl-0 = <&mcspi1_pins>;
++	pinctrl-names = "default";
++};
++
+ &usbhshost {
+ 	status = "disabled";
+ };
+
+From c64737c9668db3716f56e4160917dcc697cbef73 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 23 Sep 2016 17:45:47 -0700
+Subject: [PATCH 2/2] [DO NOT UPSTREAM] spi: add spidev to spi1
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 4c5c239..b301e8d 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -376,6 +376,19 @@
+ &mcspi1 {
+ 	pinctrl-0 = <&mcspi1_pins>;
+ 	pinctrl-names = "default";
++	status = "okay";
++
++	spidev0: spidev@0 {
++		spi-max-frequency = <24000000>;
++		reg = <0>;
++		compatible = "spidev";
++	};
++
++	spidev1: spidev@1 {
++		spi-max-frequency = <24000000>;
++		reg = <1>;
++		compatible = "spidev";
++	};
+ };
+ 
+ &usbhshost {
+--
+github
+
+From 4ff01b341348cc6e1682d8b965c239b7f895cebe Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Wed, 11 Jan 2017 16:46:08 -0800
+Subject: [PATCH 1/2] ARM: dts: anvl: set pin_off_input_pullup on sdmmc3_dat1,
+ like other mmc3 pins
+
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index dd386df..45631fc 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -160,7 +160,7 @@
+ 			OMAP3630_CORE2_IOPAD(0x25da, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_cmd */
+ 			OMAP3630_CORE2_IOPAD(0x25e2, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d3.sdmmc3_dat3 */
+ 			OMAP3630_CORE2_IOPAD(0x25e4, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d4.sdmmc3_dat0 */
+-			OMAP3630_CORE2_IOPAD(0x25e6, PIN_INPUT_PULLUP | MUX_MODE2)				/* etk_d5.sdmmc3_dat1 */
++			OMAP3630_CORE2_IOPAD(0x25e6, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d5.sdmmc3_dat1 */
+ 			OMAP3630_CORE2_IOPAD(0x25e8, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d6.sdmmc3_dat2 */
+ 		>;
+ 	};
+
+From fd68afdf6f69d9f9106dda2baefac729691d39aa Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Wed, 11 Jan 2017 17:11:23 -0800
+Subject: [PATCH 2/2] ARM: dts: anvl: remove pin_off_input_pullup from sdmmc3
+ pins
+
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 45631fc..1109a39 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -156,12 +156,12 @@
+ 
+ 	mmc3_core2_pins: pinmux_mmc3_core2_pins {
+ 		pinctrl-single,pins = <
+-			OMAP3630_CORE2_IOPAD(0x25d4, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_clk */
+-			OMAP3630_CORE2_IOPAD(0x25da, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_cmd */
+-			OMAP3630_CORE2_IOPAD(0x25e2, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d3.sdmmc3_dat3 */
+-			OMAP3630_CORE2_IOPAD(0x25e4, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d4.sdmmc3_dat0 */
+-			OMAP3630_CORE2_IOPAD(0x25e6, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d5.sdmmc3_dat1 */
+-			OMAP3630_CORE2_IOPAD(0x25e8, PIN_OFF_INPUT_PULLUP | PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d6.sdmmc3_dat2 */
++			OMAP3630_CORE2_IOPAD(0x25d4, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_clk */
++			OMAP3630_CORE2_IOPAD(0x25da, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_clk.sdmmc3_cmd */
++			OMAP3630_CORE2_IOPAD(0x25e2, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d3.sdmmc3_dat3 */
++			OMAP3630_CORE2_IOPAD(0x25e4, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d4.sdmmc3_dat0 */
++			OMAP3630_CORE2_IOPAD(0x25e6, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d5.sdmmc3_dat1 */
++			OMAP3630_CORE2_IOPAD(0x25e8, PIN_INPUT_PULLUP | MUX_MODE2)	/* etk_d6.sdmmc3_dat2 */
+ 		>;
+ 	};
+ };
+--
+github
+

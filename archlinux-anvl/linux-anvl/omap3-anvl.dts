@@ -19,7 +19,7 @@
 		};
 	};
 
-	memory {
+	memory@80000000 {
 		device_type = "memory";
 		reg = <0x80000000 0x20000000>;	/* 512 MB */
 	};
@@ -43,13 +43,10 @@
 		regulator-always-on;
 	};
 
-	fixed_wlan: fixed_wlan {
-		compatible = "regulator-fixed";
-		regulator-name = "fixed_wlan";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		enable-active-high;
-		gpio = <&twl_gpio 0 GPIO_ACTIVE_HIGH>;	/* twl_gpio0 */
+	wlan_pwrseq: wlan_pwrseq {
+		compatible = "mmc-pwrseq-sd8787";
+		pwrdn-gpios = <&twl_gpio 0 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&twl_gpio 1 GPIO_ACTIVE_HIGH>;
 	};
 
 	leds {
@@ -76,7 +73,7 @@
 };
 
 &omap3_pmx_core {
-	bq24190_irq_pin: pinmux_bq24190_irq_pin {
+	bq24190_irq_pin: pinmux_bq24190_irq_default_pin {
 		pinctrl-single,pins = <
 			OMAP3_CORE1_IOPAD(0x2184, PIN_INPUT_PULLUP | MUX_MODE4)		/* mcbsp4_clkx.gpio_152 */
 		>;
@@ -281,6 +278,7 @@
 		#size-cells = <0>;
 		reg = <0x62>;
 		nxp,hw-blink;
+		nxp,period-scale = <1300>;
 
 		red@0 {
 			label = "red";
@@ -312,10 +310,13 @@
 	bq24190: charger@6b {
 		reg = <0x6b>;
 		compatible = "ti,bq24190";
-		pinctrl-names = "default";
 		pinctrl-0 = <&bq24190_irq_pin>;
-		interrupt-parent = <&gpio5>;
-		interrupts = <24 0x0>;				/* gpio152 */
+		pinctrl-names = "default";
+		interrupts-extended = <&gpio5 24 IRQ_TYPE_EDGE_FALLING
+				       &omap3_pmx_core 0x154>;
+		interrupt-names = "irq", "wakeup";
+		gpio-otg-gpios = <&twl_gpio 6 GPIO_ACTIVE_HIGH>;	/* twl_gpio6 */
+		wakeup-source;
 	};
 };
 
@@ -340,7 +341,8 @@
 
 &mmc3 {
 	interrupts-extended = <&intc 94 &omap3_pmx_core2 0x46>;
-	vmmc-supply = <&fixed_wlan>;
+	vmmc-supply = <&fixed_3v3_sys>;
+	mmc-pwrseq = <&wlan_pwrseq>;
 	non-removable;
 	bus-width = <4>;
 	cap-power-off-card;
@@ -348,6 +350,11 @@
 	ti,cirq-gpio = <&gpio1 19 0>;	/* gpio19 */
 	pinctrl-0 = <&mmc3_pins &mmc3_core2_pins &wlan_host_wkup>;
 	pinctrl-names = "default";
+};
+
+&twl {
+	twl_rtc: rtc {
+        };
 };
 
 &twl_gpio {
