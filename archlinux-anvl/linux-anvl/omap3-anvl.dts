@@ -45,7 +45,7 @@
 
 	wlan_pwrseq: wlan_pwrseq {
 		compatible = "mmc-pwrseq-sd8787";
-		pwrdn-gpios = <&twl_gpio 0 GPIO_ACTIVE_HIGH>;
+		powerdown-gpios = <&twl_gpio 0 GPIO_ACTIVE_HIGH>;
 		reset-gpios = <&twl_gpio 1 GPIO_ACTIVE_HIGH>;
 	};
 

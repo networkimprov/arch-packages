@@ -6,6 +6,7 @@ Fil=upstream-4.9.patch
 
 SrcUpstream=(
   tmlind/linux-omap,d97556c8 # ARM: dts: Fix omap3 off mode pull defines
+  ulfh/mmc,28e9a4b8 # mmc: pwrseq: add support for Marvell SD8787 chip
   stable/linux-stable,950b6c2d # power: supply: bq27xxx_battery: don't update poll_interval param if same
   stable/linux-stable,9d052aa0 # phy: phy-twl4030-usb: emit VBUS status events to userspace
   stable/linux-stable,35c7d301 # leds: pca963x: workaround group blink scaling issue
@@ -21,14 +22,11 @@ SrcUpstream=(
 
 SrcGithub=(
   compare/anvl-v4.7...anvl-v4.7-omap2config # local
-#  commit/08652bc3 # ASoC: omap-mcbsp: Add PM QoS support for McBSP to prevent glitches
+# commit/08652bc3 # ASoC: omap-mcbsp: Add PM QoS support for McBSP to prevent glitches
   compare/anvl-v4.7...anvl-v4.7-pca963x-anvl # local
   commit/8a3d476c # mwifiex: fix p2p device doesn't find in scan problem
-#  compare/anvl-v4.7...anvl-v4.7-phy-twl4030
-#  compare/09615628...anvl-v4.7-bq27xxx # local
-#  compare/anvl-v4.7...anvl-v4.7-bq24190-int
-  commit/57ea80ad # mmc: pwrseq: initial pwrseq support for Marvell SD8787
-#  compare/anvl-v4.9...anvl-v4.9-bq27425-nvram-v7
+# compare/09615628...anvl-v4.7-bq27xxx # local
+  compare/968595b9...anvl-v4.9-nvram-test
   compare/anvl-v4.7...anvl-v4.7-spi-validation # local
   compare/anvl-v4.9...anvl-v4.9-dts-pullup # local
 )
@@ -48,6 +46,8 @@ for f in ${SrcGithub[@]}; do
   printf -- '--\ngithub\n\n' >> "$Fil"
 done
 #sed -i 's|drivers/power/|drivers/power/supply/|g' "$Fil"
+sed -i 's/.*mmc_block.o$//' "$Fil" # fix pwrseq patch
+sed -i 's/10,6 +10,7 \(@@ mmc_core-y\)/10,5 +10,6 \1/' "$Fil"
 
 echo "$Fil $(grep ^Subject: "$Fil" | wc -l) patches"
 

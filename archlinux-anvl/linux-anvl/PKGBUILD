@@ -5,9 +5,9 @@
 pkgbase="linux-anvl"
 _kernelname="${pkgbase#linux}"
 _desc="for pocket anvl"
-pkgver="4.9.5" # must use x.y.0 for x.y so package matches uname -r
+pkgver="4.9.6" # must use x.y.0 for x.y so package matches uname -r
 pkgrel="1"
-arch=('arm')
+arch=('armv7h')
 url="https://github.com/networkimprov/linux"
 license=("GPL2")
 makedepends=("kmod" "inetutils" "bc" "git")

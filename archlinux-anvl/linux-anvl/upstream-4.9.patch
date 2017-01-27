@@ -39,6 +39,184 @@ index effadd0..fbd6f72 100644
 -- 
 cgit v0.12
 
+From 28e9a4b8a4233052a8ee653b6a18e101ea77337c Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Mon, 23 Jan 2017 19:08:30 -0800
+Subject: mmc: pwrseq: add support for Marvell SD8787 chip
+
+Allow power sequencing for the Marvell SD8787 Wifi/BT chip.
+This can be abstracted to other chipsets if needed in the future.
+
+Cc: Tony Lindgren <tony@atomide.com>
+Cc: Ulf Hansson <ulf.hansson@linaro.org>
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+Signed-off-by: Ulf Hansson <ulf.hansson@linaro.org>
+---
+ drivers/mmc/core/Kconfig         |  10 ++++
+ drivers/mmc/core/Makefile        |   1 +
+ drivers/mmc/core/pwrseq_sd8787.c | 117 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 128 insertions(+)
+ create mode 100644 drivers/mmc/core/pwrseq_sd8787.c
+
+diff --git a/drivers/mmc/core/Kconfig b/drivers/mmc/core/Kconfig
+index cdfa852..fc1ecda 100644
+--- a/drivers/mmc/core/Kconfig
++++ b/drivers/mmc/core/Kconfig
+@@ -12,6 +12,16 @@ config PWRSEQ_EMMC
+ 	  This driver can also be built as a module. If so, the module
+ 	  will be called pwrseq_emmc.
+ 
++config PWRSEQ_SD8787
++	tristate "HW reset support for SD8787 BT + Wifi module"
++	depends on OF && (MWIFIEX || BT_MRVL_SDIO)
++	help
++	  This selects hardware reset support for the SD8787 BT + Wifi
++	  module. By default this option is set to n.
++
++	  This driver can also be built as a module. If so, the module
++	  will be called pwrseq_sd8787.
++
+ config PWRSEQ_SIMPLE
+ 	tristate "Simple HW reset support for MMC"
+ 	default y
+diff --git a/drivers/mmc/core/Makefile b/drivers/mmc/core/Makefile
+index b2a257d..0f81464 100644
+--- a/drivers/mmc/core/Makefile
++++ b/drivers/mmc/core/Makefile
+@@ -10,5 +10,6 @@ mmc_core-y			:= core.o bus.o host.o \
+ 				   quirks.o slot-gpio.o
+ mmc_core-$(CONFIG_OF)		+= pwrseq.o
+ obj-$(CONFIG_PWRSEQ_SIMPLE)	+= pwrseq_simple.o
++obj-$(CONFIG_PWRSEQ_SD8787)	+= pwrseq_sd8787.o
+ obj-$(CONFIG_PWRSEQ_EMMC)	+= pwrseq_emmc.o
+ mmc_core-$(CONFIG_DEBUG_FS)	+= debugfs.o
+
+diff --git a/drivers/mmc/core/pwrseq_sd8787.c b/drivers/mmc/core/pwrseq_sd8787.c
+new file mode 100644
+index 0000000..1a21e14
+--- /dev/null
++++ b/drivers/mmc/core/pwrseq_sd8787.c
+@@ -0,0 +1,117 @@
++/*
++ * pwrseq_sd8787.c - power sequence support for Marvell SD8787 BT + Wifi chip
++ *
++ * Copyright (C) 2016 Matt Ranostay <matt@ranostay.consulting>
++ *
++ * Based on the original work pwrseq_simple.c
++ *  Copyright (C) 2014 Linaro Ltd
++ *  Author: Ulf Hansson <ulf.hansson@linaro.org>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * GNU General Public License for more details.
++ *
++ */
++
++#include <linux/delay.h>
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/platform_device.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/gpio/consumer.h>
++
++#include <linux/mmc/host.h>
++
++#include "pwrseq.h"
++
++struct mmc_pwrseq_sd8787 {
++	struct mmc_pwrseq pwrseq;
++	struct gpio_desc *reset_gpio;
++	struct gpio_desc *pwrdn_gpio;
++};
++
++#define to_pwrseq_sd8787(p) container_of(p, struct mmc_pwrseq_sd8787, pwrseq)
++
++static void mmc_pwrseq_sd8787_pre_power_on(struct mmc_host *host)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
++
++	gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
++
++	msleep(300);
++	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
++}
++
++static void mmc_pwrseq_sd8787_power_off(struct mmc_host *host)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
++
++	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
++	gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
++}
++
++static const struct mmc_pwrseq_ops mmc_pwrseq_sd8787_ops = {
++	.pre_power_on = mmc_pwrseq_sd8787_pre_power_on,
++	.power_off = mmc_pwrseq_sd8787_power_off,
++};
++
++static const struct of_device_id mmc_pwrseq_sd8787_of_match[] = {
++	{ .compatible = "mmc-pwrseq-sd8787",},
++	{/* sentinel */},
++};
++MODULE_DEVICE_TABLE(of, mmc_pwrseq_sd8787_of_match);
++
++static int mmc_pwrseq_sd8787_probe(struct platform_device *pdev)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq;
++	struct device *dev = &pdev->dev;
++
++	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
++	if (!pwrseq)
++		return -ENOMEM;
++
++	pwrseq->pwrdn_gpio = devm_gpiod_get(dev, "powerdown", GPIOD_OUT_LOW);
++	if (IS_ERR(pwrseq->pwrdn_gpio))
++		return PTR_ERR(pwrseq->pwrdn_gpio);
++
++	pwrseq->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(pwrseq->reset_gpio))
++		return PTR_ERR(pwrseq->reset_gpio);
++
++	pwrseq->pwrseq.dev = dev;
++	pwrseq->pwrseq.ops = &mmc_pwrseq_sd8787_ops;
++	pwrseq->pwrseq.owner = THIS_MODULE;
++	platform_set_drvdata(pdev, pwrseq);
++
++	return mmc_pwrseq_register(&pwrseq->pwrseq);
++}
++
++static int mmc_pwrseq_sd8787_remove(struct platform_device *pdev)
++{
++	struct mmc_pwrseq_sd8787 *pwrseq = platform_get_drvdata(pdev);
++
++	mmc_pwrseq_unregister(&pwrseq->pwrseq);
++
++	return 0;
++}
++
++static struct platform_driver mmc_pwrseq_sd8787_driver = {
++	.probe = mmc_pwrseq_sd8787_probe,
++	.remove = mmc_pwrseq_sd8787_remove,
++	.driver = {
++		.name = "pwrseq_sd8787",
++		.of_match_table = mmc_pwrseq_sd8787_of_match,
++	},
++};
++
++module_platform_driver(mmc_pwrseq_sd8787_driver);
++MODULE_LICENSE("GPL v2");
+-- 
+cgit v0.12
+
 From 950b6c2d110e8df65b9d2704cc7039f3d0d9f7b2 Mon Sep 17 00:00:00 2001
 From: Matt Ranostay <mranostay@gmail.com>
 Date: Fri, 30 Sep 2016 21:45:30 -0700
@@ -1117,167 +1295,714 @@ index ff948a9..8e62897 100644
 --
 github
 
-From 57ea80adbdb7537f5f2ae7bfbf32c5b0ed8b1136 Mon Sep 17 00:00:00 2001
+From 38f2911b516894c3829f40813ad2d7b4da73d7bf Mon Sep 17 00:00:00 2001
 From: Matt Ranostay <matt@ranostay.consulting>
-Date: Sun, 13 Nov 2016 21:47:19 -0800
-Subject: [PATCH] mmc: pwrseq: initial pwrseq support for Marvell SD8787
+Date: Sun, 4 Dec 2016 18:18:38 -0800
+Subject: [PATCH 1/8] power: bq27xxx_battery: add BQ27425 chip id
 
 Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
 ---
- drivers/mmc/core/Kconfig         |  10 ++++
- drivers/mmc/core/Makefile        |   1 +
- drivers/mmc/core/pwrseq_sd8787.c | 110 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 121 insertions(+)
- create mode 100644 drivers/mmc/core/pwrseq_sd8787.c
+ drivers/power/supply/bq27xxx_battery.c     | 24 ++++++++++++++++++++++--
+ drivers/power/supply/bq27xxx_battery_i2c.c |  2 +-
+ include/linux/power/bq27xxx_battery.h      |  3 ++-
+ 3 files changed, 25 insertions(+), 4 deletions(-)
 
-diff --git a/drivers/mmc/core/Kconfig b/drivers/mmc/core/Kconfig
-index 250f223..68f329f 100644
---- a/drivers/mmc/core/Kconfig
-+++ b/drivers/mmc/core/Kconfig
-@@ -12,6 +12,16 @@ config PWRSEQ_EMMC
- 	  This driver can also be built as a module. If so, the module
- 	  will be called pwrseq_emmc.
+diff --git a/drivers/power/supply/bq27xxx_battery.c b/drivers/power/supply/bq27xxx_battery.c
+index 08c36b8..721cf6f 100644
+--- a/drivers/power/supply/bq27xxx_battery.c
++++ b/drivers/power/supply/bq27xxx_battery.c
+@@ -259,6 +259,25 @@ static u8 bq27xxx_regs[][BQ27XXX_REG_MAX] = {
+ 		[BQ27XXX_REG_DCAP] = 0x3c,
+ 		[BQ27XXX_REG_AP] = 0x18,
+ 	},
++	[BQ27425] = {
++		[BQ27XXX_REG_CTRL] = 0x00,
++		[BQ27XXX_REG_TEMP] = 0x02,
++		[BQ27XXX_REG_INT_TEMP] = 0x1e,
++		[BQ27XXX_REG_VOLT] = 0x04,
++		[BQ27XXX_REG_AI] = 0x10,
++		[BQ27XXX_REG_FLAGS] = 0x06,
++		[BQ27XXX_REG_TTE] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_TTF] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_TTES] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_TTECP] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_NAC] = 0x08,
++		[BQ27XXX_REG_FCC] = 0x0e,
++		[BQ27XXX_REG_CYCT] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_AE] = INVALID_REG_ADDR,
++		[BQ27XXX_REG_SOC] = 0x1c,
++		[BQ27XXX_REG_DCAP] = 0x3c,
++		[BQ27XXX_REG_AP] = 0x18,
++	},
+ };
  
-+config PWRSEQ_SD8787
-+	tristate "HW reset support for SD8787"
-+	depends on OF && MWIFIEX
-+	help
-+	  This selects hardware reset support for the SD8787 bluetooth and wifi
-+	  module.
-+
-+	  This driver can also be built as a module. If so, the module
-+	  will be called pwrseq_simple.
-+
- config PWRSEQ_SIMPLE
- 	tristate "Simple HW reset support for MMC"
- 	default y
-diff --git a/drivers/mmc/core/Makefile b/drivers/mmc/core/Makefile
-index f007151..f1c060e 100644
---- a/drivers/mmc/core/Makefile
-+++ b/drivers/mmc/core/Makefile
-@@ -10,5 +10,6 @@ mmc_core-y			:= core.o bus.o host.o \
- 				   quirks.o slot-gpio.o
- mmc_core-$(CONFIG_OF)		+= pwrseq.o
- obj-$(CONFIG_PWRSEQ_SIMPLE)	+= pwrseq_simple.o
-+obj-$(CONFIG_PWRSEQ_SD8787)	+= pwrseq_sd8787.o
- obj-$(CONFIG_PWRSEQ_EMMC)	+= pwrseq_emmc.o
- mmc_core-$(CONFIG_DEBUG_FS)	+= debugfs.o
-diff --git a/drivers/mmc/core/pwrseq_sd8787.c b/drivers/mmc/core/pwrseq_sd8787.c
-new file mode 100644
-index 0000000..301a35ae
---- /dev/null
-+++ b/drivers/mmc/core/pwrseq_sd8787.c
-@@ -0,0 +1,110 @@
+ static enum power_supply_property bq27000_battery_props[] = {
+@@ -427,6 +446,7 @@ static struct {
+ 	BQ27XXX_PROP(BQ27541, bq27541_battery_props),
+ 	BQ27XXX_PROP(BQ27545, bq27545_battery_props),
+ 	BQ27XXX_PROP(BQ27421, bq27421_battery_props),
++	BQ27XXX_PROP(BQ27425, bq27421_battery_props),
+ };
+ 
+ static DEFINE_MUTEX(bq27xxx_list_lock);
+@@ -677,7 +697,7 @@ static bool bq27xxx_battery_overtemp(struct bq27xxx_device_info *di, u16 flags)
+ 	if (di->chip == BQ27500 || di->chip == BQ27510 ||
+ 	    di->chip == BQ27541 || di->chip == BQ27545)
+ 		return flags & (BQ27XXX_FLAG_OTC | BQ27XXX_FLAG_OTD);
+-	if (di->chip == BQ27530 || di->chip == BQ27421)
++	if (di->chip == BQ27530 || di->chip == BQ27421 || di->chip == BQ27425)
+ 		return flags & BQ27XXX_FLAG_OT;
+ 
+ 	return false;
+@@ -688,7 +708,7 @@ static bool bq27xxx_battery_overtemp(struct bq27xxx_device_info *di, u16 flags)
+  */
+ static bool bq27xxx_battery_undertemp(struct bq27xxx_device_info *di, u16 flags)
+ {
+-	if (di->chip == BQ27530 || di->chip == BQ27421)
++	if (di->chip == BQ27530 || di->chip == BQ27421 || di->chip == BQ27425)
+ 		return flags & BQ27XXX_FLAG_UT;
+ 
+ 	return false;
+diff --git a/drivers/power/supply/bq27xxx_battery_i2c.c b/drivers/power/supply/bq27xxx_battery_i2c.c
+index 5c5c3a6..2714323 100644
+--- a/drivers/power/supply/bq27xxx_battery_i2c.c
++++ b/drivers/power/supply/bq27xxx_battery_i2c.c
+@@ -159,9 +159,9 @@ static const struct i2c_device_id bq27xxx_i2c_id_table[] = {
+ 	{ "bq27742", BQ27541 },
+ 	{ "bq27545", BQ27545 },
+ 	{ "bq27421", BQ27421 },
+-	{ "bq27425", BQ27421 },
+ 	{ "bq27441", BQ27421 },
+ 	{ "bq27621", BQ27421 },
++	{ "bq27425", BQ27425 },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(i2c, bq27xxx_i2c_id_table);
+diff --git a/include/linux/power/bq27xxx_battery.h b/include/linux/power/bq27xxx_battery.h
+index bed9557..14ecac1 100644
+--- a/include/linux/power/bq27xxx_battery.h
++++ b/include/linux/power/bq27xxx_battery.h
+@@ -9,7 +9,8 @@ enum bq27xxx_chip {
+ 	BQ27530, /* bq27530, bq27531 */
+ 	BQ27541, /* bq27541, bq27542, bq27546, bq27742 */
+ 	BQ27545, /* bq27545 */
+-	BQ27421, /* bq27421, bq27425, bq27441, bq27621 */
++	BQ27421, /* bq27421, bq27441, bq27621 */
++	BQ27425, /* bq27425 */
+ };
+ 
+ /**
+
+From cf1a577cf82b3c456eecd04e8922e6554b348cc2 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Sat, 7 Jan 2017 15:21:41 -0800
+Subject: [PATCH 2/8] power: power_supply: add battery information struct
+
+Add power_supply_battery_info structure that is used to
+enumerate battery state machine settings.
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ include/linux/power_supply.h | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index 3965503..59674a2 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -288,6 +288,18 @@ struct power_supply_info {
+ 	int use_for_apm;
+ };
+ 
 +/*
-+ * pwrseq_sd8787.c - power sequence support for Marvell SD8787
-+ *
-+ * Based on pwrseq_simple.c
-+ *
-+ *  Copyright (C) 2014 Linaro Ltd
-+ *
-+ * Author: Ulf Hansson <ulf.hansson@linaro.org>
-+ *
-+ * License terms: GNU General Public License (GPL) version 2
-+ *
-+ *  Simple MMC power sequence management
++ * This is the recommended struct to specify static battery parameters.
++ * Power supply class itself doesn't use this, but it implements access
++ * that most platform drivers should use for consistency.
 + */
 +
++struct power_supply_battery_info {
++	int energy;		/* uWh */
++	int power;		/* uAh */
++	int nominal_voltage;	/* uV */
++};
++
+ extern struct atomic_notifier_head power_supply_notifier;
+ extern int power_supply_reg_notifier(struct notifier_block *nb);
+ extern void power_supply_unreg_notifier(struct notifier_block *nb);
+
+From 18ca2e95ddb3f10392c46b47e04f906eb719a766 Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Sat, 7 Jan 2017 20:17:13 -0800
+Subject: [PATCH 3/8] power: power_supply: add battery info platform data
+ retrieval
+
+Add power_supply_get_battery_info() to get battery platform data
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/supply/power_supply_core.c | 31 +++++++++++++++++++++++++++++++
+ include/linux/power_supply.h             |  4 ++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/drivers/power/supply/power_supply_core.c b/drivers/power/supply/power_supply_core.c
+index a74d8ca..fdb9f26 100644
+--- a/drivers/power/supply/power_supply_core.c
++++ b/drivers/power/supply/power_supply_core.c
+@@ -17,6 +17,7 @@
+ #include <linux/device.h>
+ #include <linux/notifier.h>
+ #include <linux/err.h>
++#include <linux/of.h>
+ #include <linux/power_supply.h>
+ #include <linux/thermal.h>
+ #include "power_supply.h"
+@@ -487,6 +488,36 @@ struct power_supply *devm_power_supply_get_by_phandle(struct device *dev,
+ EXPORT_SYMBOL_GPL(devm_power_supply_get_by_phandle);
+ #endif /* CONFIG_OF */
+ 
++int power_supply_get_battery_info(struct power_supply *psy,
++				  struct power_supply_battery_info *info,
++				  const char *property)
++{
++	struct device_node *np = psy->of_node;
++	struct device_node *power_supply_battery_info_np;
++	int ret;
++
++	if (!np)
++		return -ENXIO;
++
++	power_supply_battery_info_np = of_parse_phandle(np, property, 0);
++	if (!power_supply_battery_info_np)
++		return -ENODEV;
++
++	ret = of_property_read_u32(power_supply_battery_info_np,
++				   "nominal-microvolt", &info->nominal_voltage);
++	if (ret < 0)
++		return ret;
++
++	ret = of_property_read_u32(power_supply_battery_info_np,
++				   "design-microwatt-hours", &info->energy);
++	if (ret < 0)
++		return ret;
++
++	return of_property_read_u32(power_supply_battery_info_np,
++				   "design-microamp-hours", &info->power);
++}
++EXPORT_SYMBOL_GPL(power_supply_get_battery_info);
++
+ int power_supply_get_property(struct power_supply *psy,
+ 			    enum power_supply_property psp,
+ 			    union power_supply_propval *val)
+diff --git a/include/linux/power_supply.h b/include/linux/power_supply.h
+index 59674a2..859d0e7f 100644
+--- a/include/linux/power_supply.h
++++ b/include/linux/power_supply.h
+@@ -318,6 +318,10 @@ static inline struct power_supply *
+ devm_power_supply_get_by_phandle(struct device *dev, const char *property)
+ { return NULL; }
+ #endif /* CONFIG_OF */
++
++extern int power_supply_get_battery_info(struct power_supply *psy,
++					 struct power_supply_battery_info *info,
++					 const char *property);
+ extern void power_supply_changed(struct power_supply *psy);
+ extern int power_supply_am_i_supplied(struct power_supply *psy);
+ extern int power_supply_set_battery_charged(struct power_supply *psy);
+
+From 41150f3c13f416f0d1b03529cb42b7506a89bfda Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 6 Jan 2017 21:54:00 -0800
+Subject: [PATCH 4/8] power: bq27xxx_battery: add i2c bulk read/write functions
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/supply/bq27xxx_battery_i2c.c | 62 ++++++++++++++++++++++++++++++
+ include/linux/power/bq27xxx_battery.h      |  4 ++
+ 2 files changed, 66 insertions(+)
+
+diff --git a/drivers/power/supply/bq27xxx_battery_i2c.c b/drivers/power/supply/bq27xxx_battery_i2c.c
+index 2714323..89e1dfe 100644
+--- a/drivers/power/supply/bq27xxx_battery_i2c.c
++++ b/drivers/power/supply/bq27xxx_battery_i2c.c
+@@ -68,6 +68,64 @@ static int bq27xxx_battery_i2c_read(struct bq27xxx_device_info *di, u8 reg,
+ 	return ret;
+ }
+ 
++static int bq27xxx_battery_i2c_write(struct bq27xxx_device_info *di, u8 reg,
++				     int value, bool single)
++{
++	struct i2c_client *client = to_i2c_client(di->dev);
++	struct i2c_msg msg;
++	unsigned char data[4];
++
++	if (!client->adapter)
++		return -ENODEV;
++
++	data[0] = reg;
++	if (single) {
++		data[1] = (unsigned char) value;
++		msg.len = 2;
++	} else {
++		put_unaligned_le16(value, &data[1]);
++		msg.len = 3;
++	}
++
++	msg.buf = data;
++	msg.addr = client->addr;
++	msg.flags = 0;
++
++	return i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EINVAL;
++}
++
++static int bq27xxx_battery_i2c_bulk_read(struct bq27xxx_device_info *di, u8 reg,
++					 u8 *data, int len)
++{
++	struct i2c_client *client = to_i2c_client(di->dev);
++
++	if (!client->adapter)
++		return -ENODEV;
++
++	return i2c_smbus_read_i2c_block_data(client, reg, len, data);
++}
++
++static int bq27xxx_battery_i2c_bulk_write(struct bq27xxx_device_info *di,
++					  u8 reg, u8 *data, int len)
++{
++	struct i2c_client *client = to_i2c_client(di->dev);
++	struct i2c_msg msg;
++	u8 buf[33];
++
++	if (!client->adapter)
++		return -ENODEV;
++
++	buf[0] = reg;
++	memcpy(&buf[1], data, len);
++
++	msg.buf = buf;
++	msg.addr = client->addr;
++	msg.flags = 0;
++	msg.len = len + 1;
++
++	return i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EINVAL;
++}
++
+ static int bq27xxx_battery_i2c_probe(struct i2c_client *client,
+ 				     const struct i2c_device_id *id)
+ {
+@@ -95,7 +153,11 @@ static int bq27xxx_battery_i2c_probe(struct i2c_client *client,
+ 	di->dev = &client->dev;
+ 	di->chip = id->driver_data;
+ 	di->name = name;
++
+ 	di->bus.read = bq27xxx_battery_i2c_read;
++	di->bus.write = bq27xxx_battery_i2c_write;
++	di->bus.read_bulk = bq27xxx_battery_i2c_bulk_read;
++	di->bus.write_bulk = bq27xxx_battery_i2c_bulk_write;
+ 
+ 	ret = bq27xxx_battery_setup(di);
+ 	if (ret)
+diff --git a/include/linux/power/bq27xxx_battery.h b/include/linux/power/bq27xxx_battery.h
+index 14ecac1..a4c2dfb 100644
+--- a/include/linux/power/bq27xxx_battery.h
++++ b/include/linux/power/bq27xxx_battery.h
+@@ -33,6 +33,9 @@ struct bq27xxx_platform_data {
+ struct bq27xxx_device_info;
+ struct bq27xxx_access_methods {
+ 	int (*read)(struct bq27xxx_device_info *di, u8 reg, bool single);
++	int (*write)(struct bq27xxx_device_info *di, u8 reg, int value, bool single);
++	int (*read_bulk)(struct bq27xxx_device_info *di, u8 reg, u8 *data, int len);
++	int (*write_bulk)(struct bq27xxx_device_info *di, u8 reg, u8 *data, int len);
+ };
+ 
+ struct bq27xxx_reg_cache {
+@@ -63,6 +66,7 @@ struct bq27xxx_device_info {
+ 	struct list_head list;
+ 	struct mutex lock;
+ 	u8 *regs;
++	u8 buffer[32];
+ };
+ 
+ void bq27xxx_battery_update(struct bq27xxx_device_info *di);
+
+From af388aa43ca98f76e28f1dacc0d80b0ac9a894dc Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Fri, 6 Jan 2017 22:24:04 -0800
+Subject: [PATCH 5/8] power: bq27xxx_battery: add initial state machine support
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ drivers/power/supply/bq27xxx_battery.c | 230 ++++++++++++++++++++++++++++++++-
+ 1 file changed, 229 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/bq27xxx_battery.c b/drivers/power/supply/bq27xxx_battery.c
+index 721cf6f..98d7611 100644
+--- a/drivers/power/supply/bq27xxx_battery.c
++++ b/drivers/power/supply/bq27xxx_battery.c
+@@ -37,6 +37,7 @@
+  * http://www.ti.com/product/bq27621-g1
+  */
+ 
 +#include <linux/delay.h>
-+#include <linux/init.h>
-+#include <linux/kernel.h>
-+#include <linux/platform_device.h>
-+#include <linux/module.h>
-+#include <linux/slab.h>
-+#include <linux/device.h>
-+#include <linux/err.h>
-+#include <linux/gpio/consumer.h>
+ #include <linux/device.h>
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+@@ -452,6 +453,46 @@ static struct {
+ static DEFINE_MUTEX(bq27xxx_list_lock);
+ static LIST_HEAD(bq27xxx_battery_devices);
+ 
++#define BQ27XXX_TERM_V_MIN	2800
++#define BQ27XXX_TERM_V_MAX	3700
 +
-+#include <linux/mmc/host.h>
++#define BQ27XXX_BLOCK_DATA_CLASS	0x3E
++#define BQ27XXX_DATA_BLOCK		0x3F
++#define BQ27XXX_BLOCK_DATA		0x40
++#define BQ27XXX_BLOCK_DATA_CHECKSUM	0x60
++#define BQ27XXX_BLOCK_DATA_CONTROL	0x61
++#define BQ27XXX_SET_CFGUPDATE		0x13
++#define BQ27XXX_SOFT_RESET		0x42
 +
-+#include "pwrseq.h"
-+
-+struct mmc_pwrseq_sd8787 {
-+	struct mmc_pwrseq pwrseq;
-+	struct gpio_desc *reset_gpio;
-+	struct gpio_desc *pwrdn_gpio;
++enum bq27xxx_dm_subclass_index {
++	BQ27XXX_DM_DESIGN_CAP = 0,
++	BQ27XXX_DM_DESIGN_ENERGY,
++	BQ27XXX_DM_TERMINATE_VOLTAGE,
++	BQ27XXX_NUM_IDX,
 +};
 +
-+#define to_pwrseq_sd8787(p) container_of(p, struct mmc_pwrseq_sd8787, pwrseq)
-+
-+static void mmc_pwrseq_sd8787_pre_power_on(struct mmc_host *host)
-+{
-+	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
-+
-+	gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
-+
-+	msleep(300);
-+	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
-+}
-+
-+static void mmc_pwrseq_sd8787_power_off(struct mmc_host *host)
-+{
-+	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
-+
-+	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
-+	gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
-+}
-+
-+static const struct mmc_pwrseq_ops mmc_pwrseq_sd8787_ops = {
-+	.pre_power_on = mmc_pwrseq_sd8787_pre_power_on,
-+	.power_off = mmc_pwrseq_sd8787_power_off,
++struct bq27xxx_dm_regs {
++	unsigned int subclass_id;
++	unsigned int offset;
++	char *name;
 +};
 +
-+static const struct of_device_id mmc_pwrseq_sd8787_of_match[] = {
-+	{ .compatible = "mmc-pwrseq-sd8787",},
-+	{/* sentinel */},
++#define BQ27XXX_GAS_GAUGING_STATE_SUBCLASS	82
++
++static struct bq27xxx_dm_regs bq27425_dm_subclass_regs[] = {
++	{ BQ27XXX_GAS_GAUGING_STATE_SUBCLASS, 12, "design-capacity" },
++	{ BQ27XXX_GAS_GAUGING_STATE_SUBCLASS, 14, "design-energy" },
++	{ BQ27XXX_GAS_GAUGING_STATE_SUBCLASS, 18, "terminate-voltage" },
 +};
-+MODULE_DEVICE_TABLE(of, mmc_pwrseq_sd8787_of_match);
 +
-+static int mmc_pwrseq_sd8787_probe(struct platform_device *pdev)
++static struct bq27xxx_dm_regs *bq27xxx_dm_subclass_regs[] = {
++	[BQ27425] = bq27425_dm_subclass_regs,
++};
++
++static unsigned int bq27xxx_unseal_keys[] = {
++	[BQ27425] = 0x04143672,
++};
++
+ static int poll_interval_param_set(const char *val, const struct kernel_param *kp)
+ {
+ 	struct bq27xxx_device_info *di;
+@@ -496,6 +537,165 @@ static inline int bq27xxx_read(struct bq27xxx_device_info *di, int reg_index,
+ 	return di->bus.read(di, di->regs[reg_index], single);
+ }
+ 
++static int bq27xxx_battery_set_seal_state(struct bq27xxx_device_info *di,
++					      bool state)
 +{
-+	struct mmc_pwrseq_sd8787 *pwrseq;
-+	struct device *dev = &pdev->dev;
++	unsigned int key = bq27xxx_unseal_keys[di->chip];
++	int ret;
 +
-+	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
-+	if (!pwrseq)
-+		return -ENOMEM;
++	if (state)
++		return di->bus.write(di, BQ27XXX_REG_CTRL, 0x20, false);
 +
-+	pwrseq->pwrdn_gpio = devm_gpiod_get(dev, "pwrdn", GPIOD_OUT_LOW);
-+	if (IS_ERR(pwrseq->pwrdn_gpio))
-+		return PTR_ERR(pwrseq->pwrdn_gpio);
++	ret = di->bus.write(di, BQ27XXX_REG_CTRL, (key >> 16) & 0xffff, false);
++	if (ret < 0)
++		return ret;
 +
-+	pwrseq->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
-+	if (IS_ERR(pwrseq->reset_gpio))
-+		return PTR_ERR(pwrseq->reset_gpio);
-+
-+	pwrseq->pwrseq.dev = dev;
-+	pwrseq->pwrseq.ops = &mmc_pwrseq_sd8787_ops;
-+	pwrseq->pwrseq.owner = THIS_MODULE;
-+	platform_set_drvdata(pdev, pwrseq);
-+
-+	return mmc_pwrseq_register(&pwrseq->pwrseq);
++	return di->bus.write(di, BQ27XXX_REG_CTRL, key & 0xffff, false);
 +}
 +
-+static int mmc_pwrseq_sd8787_remove(struct platform_device *pdev)
++static int bq27xxx_battery_read_dm_block(struct bq27xxx_device_info *di,
++					     int subclass)
 +{
-+	struct mmc_pwrseq_sd8787 *pwrseq = platform_get_drvdata(pdev);
++	int ret = di->bus.write(di, BQ27XXX_REG_CTRL, 0, false);
 +
-+	mmc_pwrseq_unregister(&pwrseq->pwrseq);
++	if (ret < 0)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_BLOCK_DATA_CONTROL, 0, true);
++	if (ret < 0)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_BLOCK_DATA_CLASS, subclass, true);
++	if (ret < 0)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_DATA_BLOCK, 0, true);
++	if (ret < 0)
++		return ret;
++
++	usleep_range(1000, 1500);
++
++	return di->bus.read_bulk(di, BQ27XXX_BLOCK_DATA,
++				(u8 *) &di->buffer, sizeof(di->buffer));
++}
++
++static int bq27xxx_battery_print_config(struct bq27xxx_device_info *di)
++{
++	struct bq27xxx_dm_regs *reg = bq27xxx_dm_subclass_regs[di->chip];
++	int ret, i;
++
++	ret = bq27xxx_battery_read_dm_block(di,
++			BQ27XXX_GAS_GAUGING_STATE_SUBCLASS);
++	if (ret < 0)
++		return ret;
++
++	for (i = 0; i < BQ27XXX_NUM_IDX; i++) {
++		int val;
++
++		if (reg->subclass_id != BQ27XXX_GAS_GAUGING_STATE_SUBCLASS)
++			continue;
++
++		val = be16_to_cpup((u16 *) &di->buffer[reg->offset]);
++
++		dev_info(di->dev, "settings for %s set at %d\n", reg->name, val);
++
++		reg++;
++	}
 +
 +	return 0;
 +}
 +
-+static struct platform_driver mmc_pwrseq_sd8787_driver = {
-+	.probe = mmc_pwrseq_sd8787_probe,
-+	.remove = mmc_pwrseq_sd8787_remove,
-+	.driver = {
-+		.name = "pwrseq_sd8787",
-+		.of_match_table = mmc_pwrseq_sd8787_of_match,
-+	},
++static bool bq27xxx_battery_update_dm_setting(struct bq27xxx_device_info *di,
++			      unsigned int reg, unsigned int val)
++{
++	struct bq27xxx_dm_regs *dm_reg = &bq27xxx_dm_subclass_regs[di->chip][reg];
++	u16 *prev = (u16 *) &di->buffer[dm_reg->offset];
++
++	if (be16_to_cpup(prev) == val)
++		return false;
++
++	*prev = cpu_to_be16(val);
++
++	return true;
++}
++
++static u8 bq27xxx_battery_checksum(struct bq27xxx_device_info *di)
++{
++	u8 *data = (u8 *) &di->buffer;
++	u16 sum = 0;
++	int i;
++
++	for (i = 0; i < sizeof(di->buffer); i++) {
++		sum += data[i];
++		sum &= 0xff;
++	}
++
++	return 0xff - sum;
++}
++
++static int bq27xxx_battery_write_nvram(struct bq27xxx_device_info *di,
++					   unsigned int subclass)
++{
++	int ret;
++
++	ret = di->bus.write(di, BQ27XXX_REG_CTRL, BQ27XXX_SET_CFGUPDATE, false);
++	if (ret)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_BLOCK_DATA_CONTROL, 0, true);
++	if (ret)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_BLOCK_DATA_CLASS, subclass, true);
++	if (ret)
++		return ret;
++
++	ret = di->bus.write(di, BQ27XXX_DATA_BLOCK, 0, true);
++	if (ret)
++		return ret;
++
++	ret = di->bus.write_bulk(di, BQ27XXX_BLOCK_DATA,
++				(u8 *) &di->buffer, sizeof(di->buffer));
++	if (ret < 0)
++		return ret;
++
++	usleep_range(1000, 1500);
++
++	di->bus.write(di, BQ27XXX_BLOCK_DATA_CHECKSUM,
++				bq27xxx_battery_checksum(di), true);
++
++	usleep_range(1000, 1500);
++
++	di->bus.write(di, BQ27XXX_REG_CTRL, BQ27XXX_SOFT_RESET, false);
++
++	return 0;
++}
++
++static int bq27xxx_battery_set_config(struct bq27xxx_device_info *di,
++				      struct power_supply_battery_info *info)
++{
++	int ret = bq27xxx_battery_read_dm_block(di,
++				BQ27XXX_GAS_GAUGING_STATE_SUBCLASS);
++
++	if (ret < 0)
++		return ret;
++
++	ret  = bq27xxx_battery_update_dm_setting(di, BQ27XXX_DM_DESIGN_CAP,
++						 info->power / 1000);
++	ret |= bq27xxx_battery_update_dm_setting(di, BQ27XXX_DM_DESIGN_ENERGY,
++						 info->energy / 1000);
++	ret |= bq27xxx_battery_update_dm_setting(di, BQ27XXX_DM_TERMINATE_VOLTAGE,
++						 info->nominal_voltage / 1000);
++
++	if (ret) {
++		dev_info(di->dev, "updating NVM settings\n");
++		return bq27xxx_battery_write_nvram(di,
++				BQ27XXX_GAS_GAUGING_STATE_SUBCLASS);
++	}
++
++	return 0;
++}
++
+ /*
+  * Return the battery State-of-Charge
+  * Or < 0 if something fails.
+@@ -751,6 +951,30 @@ static int bq27xxx_battery_read_health(struct bq27xxx_device_info *di)
+ 	return POWER_SUPPLY_HEALTH_GOOD;
+ }
+ 
++void bq27xxx_battery_settings(struct bq27xxx_device_info *di)
++{
++	struct power_supply_battery_info info = {};
++
++	/* functions don't exist for writing data so abort */
++	if (!di->bus.write || !di->bus.write_bulk)
++		return;
++
++	/* no settings to be set for this chipset so abort */
++	if (!bq27xxx_dm_subclass_regs[di->chip])
++		return;
++
++	bq27xxx_battery_set_seal_state(di, false);
++
++	if (power_supply_get_battery_info(di->bat, &info, "monitored-battery") < 0)
++		goto out;
++
++	bq27xxx_battery_set_config(di, &info);
++
++out:
++	bq27xxx_battery_print_config(di);
++	bq27xxx_battery_set_seal_state(di, true);
++}
++
+ void bq27xxx_battery_update(struct bq27xxx_device_info *di)
+ {
+ 	struct bq27xxx_reg_cache cache = {0, };
+@@ -1033,7 +1257,10 @@ static void bq27xxx_external_power_changed(struct power_supply *psy)
+ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
+ {
+ 	struct power_supply_desc *psy_desc;
+-	struct power_supply_config psy_cfg = { .drv_data = di, };
++	struct power_supply_config psy_cfg;
++
++	psy_cfg.of_node = di->dev->of_node;
++	psy_cfg.drv_data = di;
+ 
+ 	INIT_DELAYED_WORK(&di->work, bq27xxx_battery_poll);
+ 	mutex_init(&di->lock);
+@@ -1058,6 +1285,7 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
+ 
+ 	dev_info(di->dev, "support ver. %s enabled\n", DRIVER_VERSION);
+ 
++	bq27xxx_battery_settings(di);
+ 	bq27xxx_battery_update(di);
+ 
+ 	mutex_lock(&bq27xxx_list_lock);
+
+From 3d483785e7aec617f154a39e9a03d272456d2a7d Mon Sep 17 00:00:00 2001
+From: Matt Ranostay <matt@ranostay.consulting>
+Date: Sat, 7 Jan 2017 22:35:06 -0800
+Subject: [PATCH 6/8] [DO NOT UPSTREAM] devicetree: anvl: add battery
+ configuration data
+
+Signed-off-by: Matt Ranostay <matt@ranostay.consulting>
+---
+ arch/arm/boot/dts/omap3-anvl.dts | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-anvl.dts b/arch/arm/boot/dts/omap3-anvl.dts
+index 2989ee0..8a73e28 100644
+--- a/arch/arm/boot/dts/omap3-anvl.dts
++++ b/arch/arm/boot/dts/omap3-anvl.dts
+@@ -272,6 +272,14 @@
+ #include "twl4030.dtsi"
+ #include "twl4030_omap3.dtsi"
+ 
++/{
++  bat: battery {
++	nominal-microvolt = <3700000>;
++	design-microwatt-hours = <5290000>;
++	design-microamp-hours = <1430000>;
++  };
 +};
 +
-+module_platform_driver(mmc_pwrseq_sd8787_driver);
-+MODULE_LICENSE("GPL v2");
+ /* Used by PCA9632 LED controller */
+ &vaux2 {
+ 	regulator-min-microvolt = <2500000>;
+@@ -315,6 +323,7 @@
+ 	bq27425: charger@55 {
+ 		reg = <0x55>;
+ 		compatible = "ti,bq27425";
++		monitored-battery = <&bat>;
+ 	};
+ 
+ 	bq24190: charger@6b {
+
+From f00492aa6d933aace041754bbe3f7bc7c1f52266 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Wed, 25 Jan 2017 15:22:39 -0800
+Subject: [PATCH 7/8] power: bq27xxx_charger_i2c: fix order of i2c_id_table[]
+
+---
+ drivers/power/supply/bq27xxx_battery_i2c.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/bq27xxx_battery_i2c.c b/drivers/power/supply/bq27xxx_battery_i2c.c
+index 89e1dfe..f7e061a 100644
+--- a/drivers/power/supply/bq27xxx_battery_i2c.c
++++ b/drivers/power/supply/bq27xxx_battery_i2c.c
+@@ -221,9 +221,9 @@ static const struct i2c_device_id bq27xxx_i2c_id_table[] = {
+ 	{ "bq27742", BQ27541 },
+ 	{ "bq27545", BQ27545 },
+ 	{ "bq27421", BQ27421 },
++	{ "bq27425", BQ27425 },
+ 	{ "bq27441", BQ27421 },
+ 	{ "bq27621", BQ27421 },
+-	{ "bq27425", BQ27425 },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(i2c, bq27xxx_i2c_id_table);
+
+From e1b1600a001be55b8c713532bed11dffed3609f1 Mon Sep 17 00:00:00 2001
+From: Liam <github@networkimprov.net>
+Date: Thu, 26 Jan 2017 13:24:51 -0800
+Subject: [PATCH 8/8] bq27xxx_battery.c: fix init of psy_cfg = {...}
+
+---
+ drivers/power/supply/bq27xxx_battery.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/power/supply/bq27xxx_battery.c b/drivers/power/supply/bq27xxx_battery.c
+index 98d7611..17fd670 100644
+--- a/drivers/power/supply/bq27xxx_battery.c
++++ b/drivers/power/supply/bq27xxx_battery.c
+@@ -1257,10 +1257,10 @@ static void bq27xxx_external_power_changed(struct power_supply *psy)
+ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
+ {
+ 	struct power_supply_desc *psy_desc;
+-	struct power_supply_config psy_cfg;
+-
+-	psy_cfg.of_node = di->dev->of_node;
+-	psy_cfg.drv_data = di;
++	struct power_supply_config psy_cfg = {
++		.of_node = di->dev->of_node,
++		.drv_data = di,
++	};
+ 
+ 	INIT_DELAYED_WORK(&di->work, bq27xxx_battery_poll);
+ 	mutex_init(&di->lock);
 --
 github
 
